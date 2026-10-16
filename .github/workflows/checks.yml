@@ -1,0 +1,24 @@
+name: checks
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# The EA itself is not built here: compiling needs MetaEditor, which cannot be redistributed.
+# What runs is the source audit, its fixtures and the check of the texts, all with the tools of the runner.
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: source audit (no network, no file or order calls outside the allowed files)
+        run: ./audit.sh
+      - name: audit fixtures (each one passes or fails as expected)
+        run: tests/audit/run.sh
+      - name: texts (no long or medium dashes, every relative link and picture exists)
+        run: python3 -I tests/texts/check_md.py
