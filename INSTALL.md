@@ -14,7 +14,7 @@ You need the file `Plainlines.ex5`. Download it from [Releases](../../releases).
 - `SHA256SUMS`, its checksum, so you can check that the file is the one that was published (see "Check the file" below);
 - `plainlines-promo.mp4`, the 32 second video: nothing to set up, install and trade.
 
-The steps are the same on Windows, macOS and Linux: everything happens inside MetaTrader 5. On macOS the official MetaTrader 5 app runs in its own built-in Wine, and File, Open Data Folder opens the right folder in Finder. Plainlines has been tested on demo accounts, on Linux under Wine; Windows and macOS have not been tried yet, see [COMPATIBILITY.md](COMPATIBILITY.md).
+The steps are the same on Windows, macOS and Linux: everything happens inside MetaTrader 5. On macOS the official MetaTrader 5 app runs in its own built-in Wine, and File, Open Data Folder opens the right folder in Finder. Plainlines has been tested on demo accounts and used in live trading on a real broker account and a real prop firm account, on Linux under Wine; Windows and macOS have not been tried yet, see [COMPATIBILITY.md](COMPATIBILITY.md).
 
 If you build Plainlines yourself (see "Build from source" in MANUAL.md), the file lands in `MQL5/Experts/Plainlines/`, not in `MQL5/Experts`, and a plain build trades only on a demo account. Keep only one copy of Plainlines, or the Navigator shows two.
 

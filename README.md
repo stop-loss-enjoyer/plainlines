@@ -2,6 +2,8 @@
 
 **Drag the stop. Pick the risk. Press once.** Plainlines is a free trade panel for MetaTrader 5 that turns three lines on your chart into an order with the right lot.
 
+In short: a position size calculator and one-click order panel (an expert advisor) for MT5. You set the stop loss with the mouse and the risk as a percent or a sum of money, and Plainlines works out the lot size, with the spread, the commission and the broker's lot rules counted, then sends the order with its SL and TP. It works for forex, gold and other metals, indices, oil, crypto and share CFDs, on broker and prop firm accounts.
+
 https://github.com/user-attachments/assets/33eb0862-52e2-4045-adbe-e0c19ad5a353
 
 - **Install once, then just trade.** One file, five steps, a minute or two. Risk 1 percent by default, your broker's commission and swap read live from the terminal. Nothing to set up before the first trade.
@@ -10,7 +12,7 @@ https://github.com/user-attachments/assets/33eb0862-52e2-4045-adbe-e0c19ad5a353
 
 Free for your own trading, prop firm accounts included. Plainlines gives no signals and is not investment advice: you decide every trade.
 
-**Version 0.9.0** (shown as 0.90 in the terminal). Tested on demo accounts, on Linux under Wine; Windows and macOS have not been checked yet. What was and was not tried is in [COMPATIBILITY.md](COMPATIBILITY.md).
+**Version 0.9.0** (shown as 0.90 in the terminal). Tested on demo accounts and used in live trading on a real broker account (Bybit) and a real prop firm account (FTMO), on Linux under Wine; Windows and macOS have not been checked yet. What was and was not tried is in [COMPATIBILITY.md](COMPATIBILITY.md).
 
 ## Install
 
@@ -87,6 +89,26 @@ Plainlines makes no network connection, loads no DLL and sends nothing anywhere.
 - [INSTALL.md](INSTALL.md): the install with pictures, and a table of symptoms.
 - [COMPATIBILITY.md](COMPATIBILITY.md): what was tested where.
 - [CHANGELOG.md](CHANGELOG.md): what changed.
+
+## Questions
+
+**How do I calculate the lot size in MetaTrader 5?**
+By hand: lot = money at risk / (stop distance in ticks × tick value + commission per lot), then rounded down to the broker's lot step. Plainlines does this for you on every move of the stop line, for the symbol of the chart, and puts the lot on the button.
+
+**Is Plainlines free?**
+Yes, for your own trading, on personal and prop firm accounts. There is no license key, no activation and no account to create.
+
+**Does it work on prop firm accounts, FTMO for example?**
+Yes. It is a manual panel: it sizes the lot and sends only what you press. Whether a firm accepts such a panel is the firm's rule, so check its current rules. The firm's daily and total loss limits are not tracked by this free version.
+
+**How is it different from Position Sizer?**
+Position Sizer is a well known free calculator with many settings. Plainlines keeps everything in one panel with defaults that work from the first trade, counts the spread and the commission in the lot, and never raises the lot to the broker minimum without asking. The other differences are in [COMPATIBILITY.md](COMPATIBILITY.md).
+
+**Does it work on MetaTrader 4, cTrader or TradingView?**
+No, only on MetaTrader 5.
+
+**Does it send my data anywhere?**
+No. It makes no network connection and loads no DLL. The source is here, and [PRIVACY.md](PRIVACY.md) lists the files it writes.
 
 ## Reporting problems
 

@@ -1,6 +1,6 @@
 # Compatibility
 
-State as of October 2026 (written on 15 October 2026, updated on 16 October 2026), for version 0.9.0 (shown as 0.90 in the terminal). Terminal builds change. This page is a record of what was checked on that date, not a promise. The checks of 0.9.0 below were done on demo accounts or by reading data without trading. Earlier release candidates were also used by the author on a real Bybit account.
+State as of October 2026 (written on 15 October 2026, updated on 17 October 2026), for version 0.9.0 (shown as 0.90 in the terminal). Terminal builds change. This page is a record of what was checked on that date, not a promise. The checks of 0.9.0 below were done on demo accounts or by reading data without trading. Plainlines is also used by the author in live trading on a real broker account (Bybit) and a real prop firm account (FTMO).
 
 ## Terminal and platform
 
@@ -18,7 +18,7 @@ State as of October 2026 (written on 15 October 2026, updated on 16 October 2026
 | Strategy tester, including visual mode | Not checked. |
 | Several accounts in one terminal | Checked live: an FTMO demo and a MetaQuotes netting demo in one terminal, and a real and a demo FTMO account. The risk and Max total risk follow the account without setup. |
 | Plainlines and Plainlines Pro in one terminal | Plainlines Pro is planned, not released yet. The two will not trade in one terminal: while a program named `PlainlinesPro` stands on a chart of the terminal, Plainlines sends no order and manages no position ("Blocked: other Plainlines"). The other one is found by its program name, so do not rename the `.ex5` file. |
-| Real accounts | Earlier release candidates were used by the author on a real Bybit account since October 2026; 0.9.0 itself has been tested on demo accounts. Test on a demo account first. |
+| Real accounts | Used by the author in live trading on a real Bybit account (broker) and a real FTMO account (prop firm) since October 2026. Test on a demo account first. |
 
 An `.ex5` built on a newer terminal may fail to load on an older one ("newer unsupported version" was reported on the MQL5 forum). Build on the terminal you will use, or on an older build.
 

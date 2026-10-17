@@ -24,6 +24,6 @@ Safe by default:
 What was tested (details in COMPATIBILITY.md):
 
 - Demo accounts: FTMO (hedging) and MetaQuotes (netting), on Linux under Wine. Windows and macOS have not been checked.
-- Earlier release candidates were used by the author on a real Bybit account. This 0.9.0 itself has been tested on demo accounts only.
+- Used by the author in live trading on a real Bybit account (broker) and a real FTMO account (prop firm).
 
 Prop firm rules (daily and total loss floors for FTMO and other firms) are planned for a separate Plainlines Pro. Plainlines works on any MT5 account, a prop firm account included.
