@@ -4,7 +4,7 @@ Five steps, a minute or two. Nothing to configure afterwards.
 
 ![The five steps of the install, then ready to trade](assets/promo/card-install.png)
 
-A 34 second video of the install and the first trade, with sound, is attached to every release as `plainlines-promo.mp4`.
+A 32 second video with sound is attached to every release as `plainlines-promo.mp4`. It is about one thing: there is nothing to set up, you install the file and trade.
 
 ## Before you start
 
@@ -12,7 +12,7 @@ You need the file `Plainlines.ex5`. Download it from [Releases](../../releases).
 
 - `Plainlines.ex5`, the program, the only file you need;
 - `SHA256SUMS`, its checksum, so you can check that the file is the one that was published (see "Check the file" below);
-- `plainlines-promo.mp4`, the video.
+- `plainlines-promo.mp4`, the 32 second video: nothing to set up, install and trade.
 
 The steps are the same on Windows, macOS and Linux: everything happens inside MetaTrader 5. On macOS the official MetaTrader 5 app runs in its own built-in Wine, and File, Open Data Folder opens the right folder in Finder. Plainlines has been tested on demo accounts, on Linux under Wine; Windows and macOS have not been tried yet, see [COMPATIBILITY.md](COMPATIBILITY.md).
 

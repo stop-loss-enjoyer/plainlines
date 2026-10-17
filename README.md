@@ -2,7 +2,7 @@
 
 **Drag the stop. Pick the risk. Press once.** Plainlines is a free trade panel for MetaTrader 5 that turns three lines on your chart into an order with the right lot.
 
-![Plainlines: from the file to the first trade in a minute](assets/promo/plainlines-promo.gif)
+https://github.com/user-attachments/assets/33eb0862-52e2-4045-adbe-e0c19ad5a353
 
 - **Install once, then just trade.** One file, five steps, a minute or two. Risk 1 percent by default, your broker's commission and swap read live from the terminal. Nothing to set up before the first trade.
 - **The lot is right, or there is no trade.** Spread, commission and the broker's lot rules go into the lot. When something does not add up, the panel blocks and says why in one line. It never guesses.
