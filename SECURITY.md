@@ -15,7 +15,7 @@ What the project does about them (this page and `audit.sh` are about the code of
 - You can build your own `.ex5` from the source (see "Build from source" in MANUAL.md). A SHA-256 sum of a released file only identifies that file. MetaEditor does not produce identical bytes twice, so the sum is not proof that the file was built from this source.
 - Orders are sent from one place in the code only (`audit.sh` refuses `OrderSend`, `OrderSendAsync` and `CTrade` anywhere else). Every order is first checked in the terminal with OrderCheck. SL and TP go to the broker inside the order. A guard blocks a second send until the first is settled, and an order whose answer was lost is never sent again by itself.
 - A build made without `--release` (a plain compile in MetaEditor, or `./build.sh` without flags) is a demo build. It refuses to trade on anything but a demo account.
-- Mistakes are possible. This is version 0.9.2, an early public release. It has been tested on FTMO and MetaQuotes demo accounts and used by the author in live trading on a real Bybit account and a real FTMO account. Test on a demo account first and never risk money you cannot afford to lose.
+- Mistakes are possible. This is version 0.9.3, an early public release. It has been tested on FTMO and MetaQuotes demo accounts and used by the author in live trading on a real Bybit account and a real FTMO account. Test on a demo account first and never risk money you cannot afford to lose.
 
 ## Algo Trading
 

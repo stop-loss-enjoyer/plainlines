@@ -1,12 +1,13 @@
 # Compatibility
 
-State as of October 2026 (written on 15 October 2026, updated on 17 October 2026), for version 0.9.2 (shown as 0.92 in the terminal; the checks below name the version they were made with). Terminal builds change. This page is a record of what was checked on that date, not a promise. The checks of 0.9.0 below were done on demo accounts or by reading data without trading. Plainlines is also used by the author in live trading on a real broker account (Bybit) and a real prop firm account (FTMO).
+State as of October 2026 (written on 15 October 2026, updated on 17 October 2026), for version 0.9.3 (shown as 0.93 in the terminal; the checks below name the version they were made with). Terminal builds change. This page is a record of what was checked on that date, not a promise. The checks of 0.9.0 below were done on demo accounts or by reading data without trading. Plainlines is also used by the author in live trading on a real broker account (Bybit) and a real prop firm account (FTMO).
 
 ## Terminal and platform
 
 | Item | State |
 |---|---|
-| MetaTrader 5 build 6254 | Checked. The demo stand runs this build and every live check of 0.9.0 was made on it. The lowest build that works is not known. |
+| MetaTrader 5 build 6271 | Checked on 17 October 2026 on the demo stand, with the development version of 0.93: the lot and price vectors, the guard vectors, every symbol of the demo account, the Strategy Tester smoke, the check for leftover objects, the damaged and old settings files, a panel start of the release build and a trade on the demo. |
+| MetaTrader 5 build 6254 | Checked. The demo stand ran this build until 17 October 2026 and every live check of 0.9.0 was made on it. The lowest build that works is not known. |
 | MetaTrader 5 build 6230 | A read-only probe script built on 6254 loaded and ran in terminals of build 6230. Earlier release candidates, built on 6254, were used by the author in terminals of build 6230 in live trading from 14 October 2026. |
 | Demo account at FTMO, hedging mode | Checked. |
 | Wine on Linux | Checked: this is the system everything was tested on. |

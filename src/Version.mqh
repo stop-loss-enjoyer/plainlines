@@ -4,5 +4,5 @@
 // The version of the program, one place for the panel and the helper scripts. #property version of each program takes it.
 #ifndef PL_VERSION_MQH
 #define PL_VERSION_MQH
-#define PLAINLINES_VERSION "0.92"
+#define PLAINLINES_VERSION "0.93"
 #endif

@@ -11,6 +11,10 @@
 
 bool g_lines_created=false;     // a line was created since the panel last went to the top
 int  g_drag_w=-1;               // the line the pointer is moving right now (-1 none)
+//--- Click to place (Advanced): in memory only, never saved. g_place_mode is the button that started it (0 Market: SL, TP1; 1 Limit: Entry, SL,
+//--- TP1), -1 when no placing is going on. The lines are not selectable meanwhile: the line under the pointer would take the click as a drag
+int    g_place_mode=-1;
+bool   g_place_hold=false;      // the placing is over but the button of the last click is still down: the chart keeps still, the lines unlock at its release
 #define PL_LN_COUNT 6          // 0 Entry, 1 Limit, 2 SL, 3..5 TP1..TP3
 
 string PlLineName(const int w)
@@ -192,8 +196,8 @@ void PlLineCreate(const int w)
    ObjectSetInteger(0,nm,OBJPROP_STYLE,(w>=4)?STYLE_DASH:STYLE_SOLID);
    ObjectSetInteger(0,nm,OBJPROP_WIDTH,PlLineWidth());
    ObjectSetInteger(0,nm,OBJPROP_BACK,false);
-   ObjectSetInteger(0,nm,OBJPROP_SELECTABLE,true);
-   ObjectSetInteger(0,nm,OBJPROP_SELECTED,true);   // selected from the start, else a drag moves the chart
+   ObjectSetInteger(0,nm,OBJPROP_SELECTABLE,g_place_mode<0 && !g_place_hold);
+   ObjectSetInteger(0,nm,OBJPROP_SELECTED,g_place_mode<0 && !g_place_hold);   // selected from the start, else a drag moves the chart
    ObjectSetInteger(0,nm,OBJPROP_HIDDEN,false);
    ObjectSetInteger(0,nm,OBJPROP_TIMEFRAMES,OBJ_ALL_PERIODS);
    ObjectSetString(0,nm,OBJPROP_TOOLTIP,"\n");       // no pop-up with the object name

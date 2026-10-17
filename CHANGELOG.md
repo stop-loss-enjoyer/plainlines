@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.3 (2026-10-17)
+
+- New option in Advanced, Click to place (off by default). With it on, the Market and Limit buttons (in the strip, the card and the full panel) start placing the lines with the pointer: the SL line follows the cursor, a left click fixes it, then TP1 follows (its label shows the live R) and a click fixes it. Limit starts with the Entry line, then the SL, then TP1, and the order type still changes between Limit and Stop as it does when you drag the Entry. The last click only places TP1, it never sends an order: the trade button and Shift+T stay the only way to send. Esc, a right click, the same button again, the other type button, the menu, the trade button, Shift+T, a symbol or timeframe change and switching the option off cancel it and the lines go back to where they were (the trade button and Shift+T cancel without sending). If the lines are hidden, pressing the button shows them first. With the option off nothing changes: Market and Limit only switch the type.
+
 ## 0.9.2 (2026-10-17)
 
 - The Look section of the menu has a new choice, Lines: Thin or Thick. Thick (the default, as before) draws the lines on the chart 2 px wide, 3 px above scale 100; Thin draws them 1 px wide. The lines change at once, and the choice is kept for the terminal like the theme. A line can still be dragged by its price tag at either width.

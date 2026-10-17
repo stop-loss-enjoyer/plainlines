@@ -12,7 +12,7 @@ https://github.com/user-attachments/assets/33eb0862-52e2-4045-adbe-e0c19ad5a353
 
 Free for your own trading, prop firm accounts included. Plainlines gives no signals and is not investment advice: you decide every trade.
 
-**Version 0.9.2** (shown as 0.92 in the terminal). Tested on demo accounts and used in live trading on a real broker account (Bybit) and a real prop firm account (FTMO), on Linux under Wine. First users installed it on Windows 11 and on a MacBook (macOS) without problems. What was and was not tried is in [COMPATIBILITY.md](COMPATIBILITY.md).
+**Version 0.9.3** (shown as 0.93 in the terminal). Tested on demo accounts and used in live trading on a real broker account (Bybit) and a real prop firm account (FTMO), on Linux under Wine. First users installed it on Windows 11 and on a MacBook (macOS) without problems. What was and was not tried is in [COMPATIBILITY.md](COMPATIBILITY.md).
 
 ## Install
 
@@ -59,6 +59,7 @@ The small arrow at the right end of the row opens the full panel: the lines and 
 - **The result in R, net**: when a trade closes the panel says "TP hit · +2.0R · +$190.40 net", after commission and swap.
 - **Your own limits**: max total risk, max open positions and orders, max entries a day (the day starts at midnight of the server clock).
 - **Several accounts in one terminal**: switch between accounts you have used, nothing to set again. The risk, the hard cap and Max total risk are remembered for each account.
+- **Click to place** (Advanced, off by default): press Market or Limit, then click the chart to fix the SL and the TP (the Entry first for Limit) instead of dragging the lines. The last click only places a line, nothing is sent.
 - **The small things**: light and dark theme, Shift+T to open a trade (two presses, so typing a symbol never trades), a soft key click on open and close.
 
 ![Costs before you press: the spread, the commission and the swap of one night in money](assets/promo/card-costs.png)

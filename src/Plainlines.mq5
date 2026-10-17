@@ -78,6 +78,9 @@ string   g_confirm_net="";          // its netting position part, to say why it 
 bool     g_arm_conn=true;           // connection state when the confirmation was asked for
 ulong    g_last_hotkey=0;
 ulong    g_t_rc=0, g_t_sec=0, g_t_flow=0, g_t_own=0;
+void PlPlaceEnd(const string why,const int how);       // Click to place (below PlLabelRelease): how 0 the trader cancelled, 1 cancelled by another action, 2 the program ends
+bool PlPlaceBegin(const int which);
+string PlPlaceHint();
 
 
 //--- helpers -----------------------------------------------------------------------------------
@@ -547,6 +550,7 @@ void PlHandleMenu(const int key,const int opt)
       case MK_THEME:    g_cfg.theme=opt; PlThemeApply(g_cfg.theme); break;
       case MK_SCALE:    g_cfg.scale=opt; PlFollowDefaultTop(); break;
       case MK_QSTYLE:   g_cfg.quick_style=(int)PlClampD((double)opt,0,1); PlFollowDefaultTop(); break;
+      case MK_CLICKPLACE: g_cfg.click_place=!g_cfg.click_place; if(!g_cfg.click_place) PlPlaceEnd("option off",1); break;
       case MK_LINEW:    g_cfg.line_thick=(int)PlClampD((double)opt,0,1); break;       // the standing lines take the width in PlModelChanged
       case MK_SOUNDS:   g_cfg.sounds=!g_cfg.sounds; if(g_cfg.sounds) PlaySound(PL_SND_OPEN); break;       // the switch answers with the sound
      }
@@ -723,6 +727,8 @@ void PlPress(const string source,const bool ask=false)
   {
    const ulong now=GetTickCount64();
    PLDBG("PRESS "+source+" flow="+(string)g_flow);
+   //--- Click to place goes on: this press only ends it (the lines go back), it never sends
+   if(g_place_mode>=0) { PlPlaceEnd("trade button or Shift+T",0); return; }
    if(g_flow==PL_FLOW_SENDING || g_flow==PL_FLOW_CHECKING) return;
    if(g_flow==PL_FLOW_COOLDOWN)
      {
@@ -786,6 +792,7 @@ void PlOnKey(const int key,const string sp)
   {
    PLDBG("KEY code="+(string)key+" sparam="+sp+" shift="+(string)TerminalInfoInteger(TERMINAL_KEYSTATE_SHIFT));
    PlStickyClear();
+   if(key==27 && g_place_mode>=0) { PlPlaceEnd("Esc",0); return; }
    if(key==27)
      {
       //--- an unfinished edit is forced back to the model text: PlCancelArm redraws nothing while IDLE, so redraw here
@@ -845,10 +852,12 @@ void PlHandleAct(const int id,const int arg)
    switch(id)
      {
       case H_MENU:
+         PlPlaceEnd("menu",1);             // the menu replaces the main view: a placing by the pointer ends, the lines go back
          PlCancelArm("",false);            // the menu replaces the main view: the confirmation lapses
          g_panel.Redraw(); ChartRedraw();
          return;
       case H_LINES:
+         PlPlaceEnd("lines switch",1);
          //--- the lines only leave the chart: prices, lot and an armed confirmation stay as they are. After a fill the lines are hidden for this
          //--- chart only (g_lines_hid); the eye brings them back without touching the saved setting, which is the terminal's
          {
@@ -870,20 +879,41 @@ void PlHandleAct(const int id,const int arg)
       case H_KIND:
          PlFldClearBad();
          PlCancelArm("",false);
+         //--- Click to place: Market and Limit also start the placing by the pointer; the same button again, or another one, ends the one that goes on
+         if(g_place_mode>=0)
+           {
+            const bool again=(arg<=1 && g_place_mode==arg);
+            PlPlaceEnd(again?"same kind button":"another kind button",again?0:1);
+            if(again) return;
+           }
          PlSetKind((PlKind)arg);
          PLDBG("ACT kind="+(string)arg);
          PlModelChanged();
+         if(g_cfg.click_place && arg<=1) PlPlaceBegin(arg);
          return;
       case H_QKIND:
          //--- the quick strip: Market, and a second segment that is Limit, Stop or Stop-Limit as the type stands. A click on Market is a click
          //--- on Market of the full panel; a click on the second one while the type is Market sets Limit (the Entry line goes where a Limit
          //--- sits, and PlAutoKind moves on to Stop if the line is dragged across the price); while the type is pending it changes nothing
-         if(arg==1 && g_dr.kind!=PL_KIND_MARKET) return;
+         //--- Click to place: the same two buttons start the placing by the pointer (Market: SL, TP; the second: Entry, SL, TP); the same one
+         //--- again, or the other one, ends the one that goes on. Stop-Limit has its Limit line apart: that button changes nothing
+         if(g_place_mode>=0)
+           {
+            const bool again=(g_place_mode==arg);
+            PlPlaceEnd(again?"same kind button":"another kind button",again?0:1);
+            if(again) return;
+           }
+         if(arg==1 && g_dr.kind!=PL_KIND_MARKET)
+           {
+            if(g_cfg.click_place && g_dr.kind!=PL_KIND_STOP_LIMIT) { PlFldClearBad(); PlCancelArm("",false); PlPlaceBegin(1); }
+            return;
+           }
          PlFldClearBad();
          PlCancelArm("",false);
          PlSetKind((arg==0)?PL_KIND_MARKET:PL_KIND_LIMIT);
          PLDBG("ACT qkind="+(string)arg);
          PlModelChanged();
+         if(g_cfg.click_place) PlPlaceBegin(arg);
          return;
       case H_CHIP:
          if(arg>2) return;                 // only the three quick percents are buttons (the strip types any other risk in its field)
@@ -909,6 +939,7 @@ void PlHandleAct(const int id,const int arg)
          return;
         }
       case H_SWAP:
+         PlPlaceEnd("mirror",1);
          PlCancelArm("",false);
          PlMirror();
          PLDBG("ACT mirror");
@@ -1657,7 +1688,7 @@ void PlDevPoll()
 //--- the chart must not scroll under the panel or a price tag: wheel over the menu, a drag of the header, a drag of a tag
 void PlScrollGuard(const int mx,const int my)
   {
-   bool over=g_panel.Dragging() || g_panel.Inside(mx,my) || g_lab_w>=0 || PlLabelAt(mx,my)>=0;
+   bool over=g_panel.Dragging() || g_panel.Inside(mx,my) || g_lab_w>=0 || PlLabelAt(mx,my)>=0 || g_place_mode>=0 || g_place_hold;      // while the pointer places a line the chart keeps still, and until the button of the last click is up
    if(over && !g_scroll_held)
      {
       g_scroll_orig=(ChartGetInteger(0,CHART_MOUSE_SCROLL)!=0);
@@ -1719,6 +1750,7 @@ int OnInit()
    PlReadPositions();
    g_acc.open_risk_money=g_ex_open_risk; g_acc.pending_risk_money=g_ex_pend_risk; g_acc.open_no_sl=g_ex_no_sl;
    g_risk_dirty=false; g_t_risk=GetTickCount64(); g_hint_dirty=false; g_drag_w=-1; g_scroll_held=false; g_lab_w=-1; g_lab_moved=false;
+   g_place_mode=-1; g_place_hold=false;      // globals survive a symbol change: a placing never does
    g_panel.confirm_view=false;       // a new symbol or a restart never opens in the confirmation state
    if(g_lines_hid!=_Symbol) g_lines_hid="";     // the lines taken off after a fill are that symbol's alone
    if(!PlReadChartSymbol())
@@ -1775,6 +1807,8 @@ void OnDeinit(const int reason)
   {
    EventKillTimer();
    GlobalVariableDel(PL_NOALGO_GV+(string)ChartID());       // every reason: this instance no longer says it cannot trade
+   if(g_ready) PlPlaceEnd("deinit",2);      // before the draft is saved: the lines go back to where they stood, also for the adopted lines of a symbol change
+   PlPlaceCtxBack(true);                    // the right-click menu of the chart, whatever the reason
    PlScrollRestore();
    g_lab_w=-1;
    if(g_ready)
@@ -2016,8 +2050,11 @@ void OnTimer()
       const bool sr=PlStripResult();
       if(sr!=strip_res) { strip_res=sr; dirty=true; g_key=""; }
    }
+   PlPlaceCtxBack(false);
    //--- a status message expired
    if(g_msg!="" && now>=g_msg_until) { g_msg=""; dirty=true; g_key=""; }
+   //--- Click to place goes on: its hint comes back when a note that took its place (the order type changed under the pointer) is gone
+   if(g_place_mode>=0 && g_msg=="") { PlMessage(PlPlaceHint(),3600000,0); dirty=true; g_key=""; }
    //--- a redraw wanted while the left button is down waits for its release (the flags that asked for it are already cleared)
    static bool redraw_owed=false;
    if(dirty) redraw_owed=true;
@@ -2092,6 +2129,191 @@ void PlLabelRelease()
    PlLineMoved(w,true);
   }
 
+//=================================================================================================
+//  Click to place (Advanced, off by default): the Market and Limit buttons start it. The line to place follows the pointer, a left click
+//  fixes it and the next line follows: Market SL, TP1; Limit Entry, SL, TP1. The last click only places TP1, it never sends: the trade
+//  button and Shift+T stay the only way to send. Esc, a right click, the same button again, the menu, the trade button, Shift+T, a symbol
+//  or timeframe change and the end of the program put the lines back to where they stood. In memory only, nothing is saved.
+//=================================================================================================
+int      g_pl_seq[3];             // the lines to place, in order (0 Entry, 2 SL, 3 TP1)
+int      g_pl_n=0, g_pl_i=0;      // how many, and the one that follows the pointer now
+PlPx     g_pl_px;                 // the lines before the placing began
+PlKind   g_pl_kind=PL_KIND_MARKET;
+bool     g_pl_tpp[PL_MAX_TP];
+double   g_pl_slt=0.0, g_pl_tpt=0.0;
+bool     g_pl_rbtn=false;         // the right button is down
+int      g_pl_mx=0, g_pl_my=0;    // the pointer as the last mouse event saw it
+ulong    g_pl_clicked=0;          // when the last click fixed a line: a double click does not fix two
+bool     g_pl_ctx_off=false;      // the chart's right-click menu is switched off meanwhile, a right click is a cancel here, not a menu
+bool     g_pl_ctx_orig=true;      // ... and what it was
+ulong    g_pl_ctx_at=0;           // when the placing ended: the menu comes back a little later, the release of the right button must not open it
+
+//--- the right-click menu of the chart comes back (at once on the end of the program, else half a second after the placing ended and the right button is up)
+void PlPlaceCtxBack(const bool force)
+  {
+   if(!g_pl_ctx_off) return;
+   if(!force && (g_place_mode>=0 || g_pl_rbtn || GetTickCount64()-g_pl_ctx_at<500)) return;
+   ChartSetInteger(0,CHART_CONTEXT_MENU,g_pl_ctx_orig);
+   g_pl_ctx_off=false;
+  }
+
+//--- the hint of the line that follows now: the status line shows it (the quick strip has no status text, only the dot)
+string PlPlaceHint()
+  {
+   if(g_place_mode<0 || g_pl_i>=g_pl_n) return "";
+   const int w=g_pl_seq[g_pl_i];
+   return (w==0)?PLS_PLACE_ENTRY:(w==2)?PLS_PLACE_SL:PLS_PLACE_TP;
+  }
+
+bool PlPlaceIsHint(const string t)
+  {
+   return (t==PLS_PLACE_ENTRY || t==PLS_PLACE_SL || t==PLS_PLACE_TP);
+  }
+
+void PlPlaceSay()
+  {
+   PlMessage(PlPlaceHint(),3600000,0);
+   g_key="";
+   if(g_panel.Created()) { g_panel.Redraw(); ChartRedraw(); }
+  }
+
+//--- the lines cannot be grabbed while the pointer places one: the line under it would take the click as a drag
+void PlPlaceLock(const bool lock)
+  {
+   for(int w=0;w<PL_LN_COUNT;w++)
+     {
+      const string nm=PlLineName(w);
+      if(ObjectFind(0,nm)<0) continue;
+      ObjectSetInteger(0,nm,OBJPROP_SELECTABLE,!lock);
+      ObjectSetInteger(0,nm,OBJPROP_SELECTED,!lock);
+     }
+  }
+
+//--- the price under the pointer on the tick grid (the chart's own window only)
+bool PlPlacePrice(const int mx,const int my,double &price)
+  {
+   const int ch=(int)ChartGetInteger(0,CHART_HEIGHT_IN_PIXELS);
+   if(my<0 || my>=ch) return false;
+   datetime t=0; double p=0.0; int sw=0;
+   if(!ChartXYToTimePrice(0,mx,my,sw,t,p) || sw!=0 || p<=0.0) return false;
+   price=PlTickRound(p);
+   return (price>0.0);
+  }
+
+//--- the button of the last click is up: the lines can be grabbed again
+void PlPlaceReleased()
+  {
+   if(!g_place_hold) return;
+   g_place_hold=false;
+   if(g_place_mode<0) PlPlaceLock(false);
+   PlScrollGuard(g_pl_mx,g_pl_my);
+  }
+
+bool PlPlaceBegin(const int which)
+  {
+   if(g_place_mode>=0 || !g_prices_ok) return false;
+   if(g_dr.kind==PL_KIND_STOP_LIMIT) return false;
+   int n=0;
+   if(which==1 && PlLineWanted(0)) { g_pl_seq[n]=0; n++; }
+   if(PlLineWanted(2) && !g_cfg.atr_on) { g_pl_seq[n]=2; n++; }      // the ATR stop owns the SL: a click on it would never take
+   if(PlLineWanted(3)) { g_pl_seq[n]=3; n++; }
+   if(n==0) return false;
+   //--- the lines are the whole of it: hidden by the eye, off in the menu or taken off after a fill, they come back first
+   g_lines_hid="";
+   if(!g_cfg.lines) { g_cfg.lines=true; PlSettingsSave(); }
+   PlLinesSync(); PlLinesLabels();
+   g_pl_n=n; g_pl_i=0;
+   g_pl_px=g_px; g_pl_kind=g_dr.kind;
+   for(int i=0;i<PL_MAX_TP;i++) g_pl_tpp[i]=g_dr.tp_price[i];
+   g_pl_slt=g_dr.sl_ticks; g_pl_tpt=g_dr.tp_ticks;
+   g_place_mode=which; g_place_hold=false; g_pl_clicked=0;
+   if(!g_pl_ctx_off)
+     {
+      g_pl_ctx_orig=(ChartGetInteger(0,CHART_CONTEXT_MENU)!=0);
+      if(g_pl_ctx_orig) { ChartSetInteger(0,CHART_CONTEXT_MENU,false); g_pl_ctx_off=true; }
+     }
+   PlPlaceLock(true);
+   if(g_pl_seq[0]==3) g_dr.tp_price[0]=true;
+   PlScrollGuard(g_pl_mx,g_pl_my);
+   PLDBG("PLACE armed mode="+(string)which+" steps="+(string)n+" first="+PlLineName(g_pl_seq[0]));
+   PlPlaceSay();
+   return true;
+  }
+
+//--- how: 0 the trader cancelled (says so), 1 another action cancelled it (the caller redraws), 2 the program ends (no drawing)
+void PlPlaceEnd(const string why,const int how)
+  {
+   if(g_place_mode<0) return;
+   PLDBG("PLACE cancelled: "+why+" step="+(string)g_pl_i+"/"+(string)g_pl_n);
+   g_place_mode=-1; g_drag_w=-1; g_pl_i=0; g_pl_n=0; g_pl_ctx_at=GetTickCount64();
+   g_px=g_pl_px; g_dr.kind=g_pl_kind;
+   for(int i=0;i<PL_MAX_TP;i++) g_dr.tp_price[i]=g_pl_tpp[i];
+   g_dr.sl_ticks=g_pl_slt; g_dr.tp_ticks=g_pl_tpt;
+   if(PlPlaceIsHint(g_msg)) { g_msg=""; g_msg_until=0; }      // also at a symbol change: the message is a global and would stand on the next symbol
+   if(how==2)
+     {
+      for(int w=0;w<PL_LN_COUNT;w++)      // the lines of a symbol change stay on the chart and are adopted: they carry the old prices again
+        {
+         const string nm=PlLineName(w);
+         if(ObjectFind(0,nm)>=0 && PlPxGet(w)>0.0) ObjectSetDouble(0,nm,OBJPROP_PRICE,PlPxGet(w));
+        }
+      PlPlaceLock(false);
+      PlPlaceCtxBack(true);
+      return;
+     }
+   if(!g_place_hold) PlPlaceLock(false);
+   if(how==0) PlMessage(PLS_CANCELLED,2500,0);
+   g_key="";
+   PlModelChanged();                   // the lines, the labels and the draft go back with the numbers
+   PlScrollGuard(g_pl_mx,g_pl_my);
+  }
+
+//--- a left click outside the panel fixes the line that follows
+void PlPlaceClick(const int mx,const int my)
+  {
+   const ulong now=GetTickCount64();
+   if(g_pl_clicked!=0 && now-g_pl_clicked<300) return;
+   double p=0.0;
+   if(!PlPlacePrice(mx,my,p)) return;
+   const int w=g_pl_seq[g_pl_i];
+   const string nm=PlLineName(w);
+   if(ObjectFind(0,nm)<0) return;
+   g_pl_clicked=now;
+   ObjectSetDouble(0,nm,OBJPROP_PRICE,p);        // the line is where the click is, not where the last throttled step left it
+   PlPxSet(w,p);
+   g_pl_i++;
+   const bool last=(g_pl_i>=g_pl_n);
+   PLDBG("PLACE fixed "+PlLineName(w)+" at "+DoubleToString(p,g_sym.digits)+(last?" (last)":""));
+   if(last)
+     {
+      g_place_mode=-1; g_place_hold=true; g_pl_ctx_at=now;        // the button is still down: the chart keeps still and the lines stay locked until its release
+      if(PlPlaceIsHint(g_msg)) { g_msg=""; g_msg_until=0; }
+     }
+   else if(g_pl_seq[g_pl_i]==3) g_dr.tp_price[0]=true;       // the TP follows as a price: its money and R read the pointer
+   PlLineMoved(w,true);                           // the normal path of a dropped line: auto kind, recalculation, the draft, once
+   g_drag_w=-1;
+   if(last) PLDBG("PLACE done");
+   else PlPlaceSay();                             // after PlLineMoved: its auto kind may have said "Entry moved"
+   if(last) PlScrollGuard(mx,my);
+  }
+
+//--- the pointer moved: the line follows (the live step of a drag, no draft, no model change)
+void PlPlaceFollow(const int mx,const int my)
+  {
+   if(GetTickCount64()-g_last_live<40) return;
+   double p=0.0;
+   if(!PlPlacePrice(mx,my,p)) return;
+   const int w=g_pl_seq[g_pl_i];
+   const string nm=PlLineName(w);
+   if(ObjectFind(0,nm)<0) return;
+   const double tol=(g_sym.tick_size>0.0)?g_sym.tick_size/4.0:1e-9;
+   if(MathAbs(ObjectGetDouble(0,nm,OBJPROP_PRICE)-p)<=tol) return;
+   ObjectSetDouble(0,nm,OBJPROP_PRICE,p);
+   ObjectSetInteger(0,nm,OBJPROP_SELECTABLE,false);
+   PlLiveDrag();
+   g_drag_w=-1;
+  }
+
 void OnChartEvent(const int id,const long &lparam,const double &dparam,const string &sparam)
   {
    if(!g_ready) return;
@@ -2102,10 +2324,20 @@ void OnChartEvent(const int id,const long &lparam,const double &dparam,const str
          int mx=(int)lparam, my=(int)dparam;
          int fl=(int)StringToInteger(sparam);
          bool left=((fl&1)!=0);
+         //--- Click to place: the right button cancels, a left click outside the panel fixes the line that follows (no tag or line is grabbed
+         //--- meanwhile), and the pointer moves it. A press in the panel goes the usual way, so the buttons that cancel still work
+         const bool right=((fl&2)!=0);
+         const bool rdown=(right && !g_pl_rbtn);
+         g_pl_rbtn=right;
+         g_pl_mx=mx; g_pl_my=my;
+         if(!left) PlPlaceReleased();
+         if(rdown) PlPlaceEnd("right click",0);
+         bool placed_now=false;
          if(left && !g_lbtn)
            {
             g_press_in_panel=g_panel.Inside(mx,my);
             if(g_press_in_panel) PlStickyClear();
+            else if(g_place_mode>=0) { PlPlaceClick(mx,my); placed_now=true; }
             else PlLabelPress(mx,my);
            }
          const bool lab_up=(!left && g_lab_w>=0);
@@ -2126,8 +2358,12 @@ void OnChartEvent(const int id,const long &lparam,const double &dparam,const str
             PlSettingsSave();
             PLDBG("ACT panel moved "+(string)g_cfg.px+","+(string)g_cfg.py);
            }
-         if(left && g_lab_w>=0) PlLabelFollow(mx,my);
-         if(left && !g_panel.Dragging() && !g_press_in_panel) PlLiveDrag();
+         if(g_place_mode>=0 && !placed_now && !g_panel.Dragging() && !g_panel.Inside(mx,my) && !(left && g_press_in_panel)) PlPlaceFollow(mx,my);
+         else if(g_place_mode<0 && !g_place_hold)
+           {
+            if(left && g_lab_w>=0) PlLabelFollow(mx,my);
+            if(left && !g_panel.Dragging() && !g_press_in_panel) PlLiveDrag();
+           }
          if(lab_up) { PlLabelRelease(); PlScrollGuard(mx,my); }
          break;
         }

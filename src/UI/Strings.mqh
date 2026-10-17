@@ -95,6 +95,7 @@
 #define PLS_SUB_BE           "BE "
 #define PLS_SUB_TRAIL        "trail"
 #define PLS_SUB_CHANGED      "changed"
+#define PLS_SUB_CLICK_PLACE  "Click to place"
 
 
 //--- trading: confirmation and send results
@@ -105,6 +106,13 @@
 #define PLS_POS_CHANGED      "Position changed: press again"
 #define PLS_CONFIRM_AGAIN    "Plan changed: confirm again"
 #define PLS_CANCELLED        "Cancelled"
+//--- Click to place: the line follows the pointer, a click fixes it (the status line shows it; the quick strip has no status text, only the dot)
+#define PLS_PLACE_ENTRY      "Click the chart to set Entry. Esc cancels."
+#define PLS_PLACE_SL         "Click the chart to set SL. Esc cancels."
+#define PLS_PLACE_TP         "Click the chart to set TP. Esc cancels."
+#define PLS_PLACE_ENTRY_CARD "Click to set Entry"       // the short forms for the quick card, see PlAltOfPhrase
+#define PLS_PLACE_SL_CARD    "Click to set SL"
+#define PLS_PLACE_TP_CARD    "Click to set TP"
 #define PLS_BUSY             "Another order is still being handled"
 
 //--- positions block and management
@@ -542,6 +550,7 @@ string PlGuardPhrase(const PlGuardOut &o,const PlGuardCfg &c,const double new_ri
 #define PLS_TP3_SHARE                    "TP3 share"
 #define PLS_TRADE_WITHOUT_SL             "Trade without SL"
 #define PLS_NO_TP                        "No TP"
+#define PLS_CLICK_PLACE                  "Click to place"
 #define PLS_MAGIC                        "Magic"
 #define PLS_MAGIC_NOTE                   "Positions of another magic are not listed or closed here"
 #define PLS_COMMENT                      "Comment"
@@ -783,6 +792,9 @@ string PlAltOfPhrase(const string t)
      }
    if(t==PLS_MARKET_CLOSED_SHORT) return PLS_MARKET_CLOSED_CARD;
    if(t==PLS_EA_NOT_ALLOWED_SHORT) return PLS_EA_NOT_ALLOWED_CARD;
+   if(t==PLS_PLACE_ENTRY) return PLS_PLACE_ENTRY_CARD;
+   if(t==PLS_PLACE_SL) return PLS_PLACE_SL_CARD;
+   if(t==PLS_PLACE_TP) return PLS_PLACE_TP_CARD;
    if(t==PLS_SET_SL) return PLS_SET_SL_CARD;
    if(t==PLS_NO_SL_SIDE) return PLS_NO_SL_SIDE_CARD;
    if(t==PLS_PRESS_AGAIN_TO_SEND_AT_MARKET) return PLS_PRESS_AGAIN_CARD;

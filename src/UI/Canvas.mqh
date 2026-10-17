@@ -49,7 +49,7 @@ enum PlMenuKey
    MK_RESERVED1, MK_RESERVED2,       // reserved ids: the numbers of the other keys stay as they are
    MK_THEME, MK_SCALE,
    MK_RESERVED3,
-   MK_SOUNDS, MK_QSTYLE, MK_LINEW
+   MK_SOUNDS, MK_QSTYLE, MK_LINEW, MK_CLICKPLACE
   };
 
 enum PlFont { FN_UI=0, FN_SB=1, FN_NUM=2, FN_BRAND=3 };
@@ -2106,6 +2106,7 @@ string PlSecSub(const int idx,color &c)
          if(g_cfg.atr_on) t=PLS_SUB_ATR+PlNumTrim(g_cfg.atr_mult,2)+"x";
          if(g_cfg.subtract_open) t+=(t!=""?dt:"")+PLS_SUB_SUB_OPEN;
          if(g_cfg.no_tp) t+=(t!=""?dt:"")+PLS_NO_TP;
+         if(g_cfg.click_place) t+=(t!=""?dt:"")+PLS_SUB_CLICK_PLACE;
          return (t!="")?t:PLS_SUB_RARELY;
         }
       case PL_SEC_LOOK:
@@ -2251,6 +2252,7 @@ double CPlPanel::BuildMenu(double y)
          y=MNum(y,PLF_ATR_PERIOD,PLS_ATR_PERIOD);
         }
       y=MToggle(y,MK_NO_TP,PLS_NO_TP,g_cfg.no_tp);
+      y=MToggle(y,MK_CLICKPLACE,PLS_CLICK_PLACE,g_cfg.click_place);
       y=MNum(y,PLF_COMMENT,PLS_COMMENT,"",true,120);
       y+=6;
      }
