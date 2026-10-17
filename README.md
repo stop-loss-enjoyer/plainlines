@@ -12,7 +12,7 @@ https://github.com/user-attachments/assets/33eb0862-52e2-4045-adbe-e0c19ad5a353
 
 Free for your own trading, prop firm accounts included. Plainlines gives no signals and is not investment advice: you decide every trade.
 
-**Version 0.9.2** (shown as 0.92 in the terminal). Tested on demo accounts and used in live trading on a real broker account (Bybit) and a real prop firm account (FTMO), on Linux under Wine. A first user installed it on Windows 11 without problems; macOS has not been checked yet. What was and was not tried is in [COMPATIBILITY.md](COMPATIBILITY.md).
+**Version 0.9.2** (shown as 0.92 in the terminal). Tested on demo accounts and used in live trading on a real broker account (Bybit) and a real prop firm account (FTMO), on Linux under Wine. First users installed it on Windows 11 and on a MacBook (macOS) without problems. What was and was not tried is in [COMPATIBILITY.md](COMPATIBILITY.md).
 
 ## Install
 

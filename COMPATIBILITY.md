@@ -11,7 +11,7 @@ State as of October 2026 (written on 15 October 2026, updated on 17 October 2026
 | Demo account at FTMO, hedging mode | Checked. |
 | Wine on Linux | Checked: this is the system everything was tested on. |
 | Windows | A first user installed 0.9.1 on Windows 11 without problems (17 October 2026, report of the user). Trading on Windows has not been checked by the author. |
-| macOS | Not checked. |
+| macOS | A first user installed 0.9.2 on a MacBook without problems (17 October 2026, report of the user). Trading on macOS has not been checked by the author. |
 | Netting accounts | Supported with refusals: reverse or close of the open position, a pending order already open on the symbol, no pending order while a position is open, an SL is required when adding, one TP when adding, a TP share below the minimum lot, no split of a lot above the broker's maximum, no risk room left, the open position cannot be valued. Run live on a MetaQuotes netting demo account (Forex Netting, USD) and checked by test vectors. |
 | Bybit | Symbol parameters and the commission rules were read in a live Bybit terminal (read only). With 0.9.0 no order was sent and nothing was traded there, and 0.9.0 itself has not been run on a Bybit account; earlier release candidates were used there by the author. See the symbol tests below. |
 | Other brokers | Not checked. |
