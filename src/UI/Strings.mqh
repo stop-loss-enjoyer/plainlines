@@ -514,6 +514,8 @@ string PlGuardPhrase(const PlGuardOut &o,const PlGuardCfg &c,const double new_ri
 #define PLS_LOT_WORD_UP                  "Lot "
 #define PLS_Q_NO_SL                      "No SL"
 #define PLS_QUICK_PANEL                  "Quick panel"
+#define PLS_LINES_WIDTH                  "Lines"
+#define PLS_THIN_THICK                   "Thin|Thick"
 #define PLS_STRIP_CARD                   "Strip|Card"
 #define PLS_KIND_MKT_S                   "Mkt"
 #define PLS_KIND_LMT_S                   "Lmt"

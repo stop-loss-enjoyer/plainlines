@@ -1,6 +1,6 @@
 # Privacy
 
-This text describes version 0.9.1 of Plainlines. It runs inside your terminal and talks to nothing else.
+This text describes version 0.9.2 of Plainlines. It runs inside your terminal and talks to nothing else.
 
 ## What it does not do
 

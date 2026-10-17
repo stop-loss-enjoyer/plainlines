@@ -50,6 +50,7 @@ struct PlSettings
    int               scale;           // 0 Auto, 1 100, 2 125, 3 150
    bool              quick;           // the quick panel (risk, order type, open button) is shown; false: the full panel
    int               quick_style;     // the quick panel as a 0 strip (one row) or 1 card; the same for the terminal, like the theme
+   int               line_thick;      // the lines on the chart: 0 Thin (1 px), 1 Thick (2 px, 3 above scale 100); the same for the terminal, like the theme
    int               px;              // panel position in chart pixels, -1 = default
    int               py;
   };
@@ -234,7 +235,7 @@ void PlSettingsDefaults()
    g_cfg.close_btns=true; g_cfg.sounds=true; g_cfg.lines=true;
    g_cfg.max_open=0; g_cfg.max_day=0; g_cfg.margin_use=50.0;
    g_cfg.theme=0; g_cfg.scale=0;
-   g_cfg.quick=true; g_cfg.quick_style=0; g_cfg.px=-1; g_cfg.py=-1;
+   g_cfg.quick=true; g_cfg.quick_style=0; g_cfg.line_thick=1; g_cfg.px=-1; g_cfg.py=-1;
    //--- the risk is the last one typed or chosen on this terminal (one account), the same on every symbol
    g_dr.unit_money=false; g_dr.risk_pct=1.0; g_dr.risk_money=100.0;
   }
@@ -298,7 +299,7 @@ void PlSettingsBuild()
    PlKvSetB("lines",g_cfg.lines);
    PlKvSetI("max_open",g_cfg.max_open); PlKvSetI("max_day",g_cfg.max_day); PlKvSetD("margin_use",g_cfg.margin_use);
    PlKvSetI("theme",g_cfg.theme); PlKvSetI("scale",g_cfg.scale);
-   PlKvSetB("quick",g_cfg.quick); PlKvSetI("quick_style",g_cfg.quick_style); PlKvSetI("px",g_cfg.px); PlKvSetI("py",g_cfg.py);
+   PlKvSetB("quick",g_cfg.quick); PlKvSetI("quick_style",g_cfg.quick_style); PlKvSetI("line_thick",g_cfg.line_thick); PlKvSetI("px",g_cfg.px); PlKvSetI("py",g_cfg.py);
    //--- the risk: the plain keys are the last risk of this terminal (what an account seen for the first time starts with),
    //--- the keys with @<profile id> are the last risk of that account. Both live in this one file, so the
    //--- per-key merge of PlSettingsSave between charts covers them as well.
@@ -452,6 +453,7 @@ void PlSettingsLoad()
    g_cfg.theme=(int)PlClampD((double)PlKvI("theme",g_cfg.theme),0,2);
    g_cfg.scale=(int)PlClampD((double)PlKvI("scale",g_cfg.scale),0,3);
    g_cfg.quick=PlKvB("quick",g_cfg.quick); g_cfg.quick_style=(int)PlClampD((double)PlKvI("quick_style",g_cfg.quick_style),0,1);
+   g_cfg.line_thick=(int)PlClampD((double)PlKvI("line_thick",g_cfg.line_thick),0,1);      // a settings file of an earlier build has no such key: Thick
    g_cfg.px=(int)PlKvI("px",g_cfg.px); g_cfg.py=(int)PlKvI("py",g_cfg.py);
    g_risk_migrate=!PlKvHas("risk_pct");
    PlRiskTake();

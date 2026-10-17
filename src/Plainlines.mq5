@@ -547,6 +547,7 @@ void PlHandleMenu(const int key,const int opt)
       case MK_THEME:    g_cfg.theme=opt; PlThemeApply(g_cfg.theme); break;
       case MK_SCALE:    g_cfg.scale=opt; PlFollowDefaultTop(); break;
       case MK_QSTYLE:   g_cfg.quick_style=(int)PlClampD((double)opt,0,1); PlFollowDefaultTop(); break;
+      case MK_LINEW:    g_cfg.line_thick=(int)PlClampD((double)opt,0,1); break;       // the standing lines take the width in PlModelChanged
       case MK_SOUNDS:   g_cfg.sounds=!g_cfg.sounds; if(g_cfg.sounds) PlaySound(PL_SND_OPEN); break;       // the switch answers with the sound
      }
    PlSettingsSave();

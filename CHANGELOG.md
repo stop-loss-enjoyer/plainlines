@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.2 (2026-10-17)
+
+- The Look section of the menu has a new choice, Lines: Thin or Thick. Thick (the default, as before) draws the lines on the chart 2 px wide, 3 px above scale 100; Thin draws them 1 px wide. The lines change at once, and the choice is kept for the terminal like the theme. A line can still be dragged by its price tag at either width.
+
 ## 0.9.1 (2026-10-17)
 
 - The BE now button of a position row shows while closing the position at its SL would still lose money, by the same measure as the Open risk line, and the click moves the SL to the level where that measure is zero or more, so the button and Open risk never disagree. Before, the button hid at an SL one tick past the open even when the commission and the swap still made the position a loss (it showed Open risk with no button), and a position without a record of the panel had no commission or swap in the level.

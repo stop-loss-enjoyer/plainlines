@@ -1,6 +1,6 @@
 # Compatibility
 
-State as of October 2026 (written on 15 October 2026, updated on 17 October 2026), for version 0.9.1 (shown as 0.91 in the terminal; the checks below name the version they were made with). Terminal builds change. This page is a record of what was checked on that date, not a promise. The checks of 0.9.0 below were done on demo accounts or by reading data without trading. Plainlines is also used by the author in live trading on a real broker account (Bybit) and a real prop firm account (FTMO).
+State as of October 2026 (written on 15 October 2026, updated on 17 October 2026), for version 0.9.2 (shown as 0.92 in the terminal; the checks below name the version they were made with). Terminal builds change. This page is a record of what was checked on that date, not a promise. The checks of 0.9.0 below were done on demo accounts or by reading data without trading. Plainlines is also used by the author in live trading on a real broker account (Bybit) and a real prop firm account (FTMO).
 
 ## Terminal and platform
 
@@ -10,7 +10,7 @@ State as of October 2026 (written on 15 October 2026, updated on 17 October 2026
 | MetaTrader 5 build 6230 | A read-only probe script built on 6254 loaded and ran in terminals of build 6230. Earlier release candidates, built on 6254, were used by the author in terminals of build 6230 in live trading from 14 October 2026. |
 | Demo account at FTMO, hedging mode | Checked. |
 | Wine on Linux | Checked: this is the system everything was tested on. |
-| Windows | Not checked. |
+| Windows | A first user installed 0.9.1 on Windows 11 without problems (17 October 2026, report of the user). Trading on Windows has not been checked by the author. |
 | macOS | Not checked. |
 | Netting accounts | Supported with refusals: reverse or close of the open position, a pending order already open on the symbol, no pending order while a position is open, an SL is required when adding, one TP when adding, a TP share below the minimum lot, no split of a lot above the broker's maximum, no risk room left, the open position cannot be valued. Run live on a MetaQuotes netting demo account (Forex Netting, USD) and checked by test vectors. |
 | Bybit | Symbol parameters and the commission rules were read in a live Bybit terminal (read only). With 0.9.0 no order was sent and nothing was traded there, and 0.9.0 itself has not been run on a Bybit account; earlier release candidates were used there by the author. See the symbol tests below. |

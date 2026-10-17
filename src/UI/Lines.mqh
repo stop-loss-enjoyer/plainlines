@@ -115,9 +115,11 @@ color PlLineColor(const int w)
    return to;
   }
 
-//--- a line has to be easy to grab with the mouse: width 2, and 3 above scale 100 (one device pixel is thin on a scaled screen)
+//--- Thick (the default): a line has to be easy to grab with the mouse, width 2, and 3 above scale 100 (one device pixel is thin
+//--- on a scaled screen). Thin, the choice in Look: 1 px. A price tag grabs the line at any width.
 int PlLineWidth()
   {
+   if(g_cfg.line_thick==0) return 1;
    return (PlScaleGet(g_cfg.scale)<=1.0)?2:3;
   }
 

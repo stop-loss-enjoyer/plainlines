@@ -49,7 +49,7 @@ enum PlMenuKey
    MK_RESERVED1, MK_RESERVED2,       // reserved ids: the numbers of the other keys stay as they are
    MK_THEME, MK_SCALE,
    MK_RESERVED3,
-   MK_SOUNDS, MK_QSTYLE
+   MK_SOUNDS, MK_QSTYLE, MK_LINEW
   };
 
 enum PlFont { FN_UI=0, FN_SB=1, FN_NUM=2, FN_BRAND=3 };
@@ -2262,6 +2262,7 @@ double CPlPanel::BuildMenu(double y)
       y=MSeg(y,MK_THEME,PLS_THEME,PLS_AUTO_LIGHT_DARK,g_cfg.theme);
       y=MSeg(y,MK_SCALE,PLS_SCALE,PLS_AUTO_100_125_150,g_cfg.scale);
       y=MSeg(y,MK_QSTYLE,PLS_QUICK_PANEL,PLS_STRIP_CARD,g_cfg.quick_style);
+      y=MSeg(y,MK_LINEW,PLS_LINES_WIDTH,PLS_THIN_THICK,g_cfg.line_thick);
       y=MToggle(y,MK_SOUNDS,PLS_SOUNDS,g_cfg.sounds);
       y=MText(y,PLS_VERSION_WORD,PLAINLINES_VERSION+PL_BUILD_TAG);
       y+=6;
