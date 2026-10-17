@@ -30,6 +30,7 @@ bool       g_dev_rulezero=false;    // development: the broker's rule on every s
 bool       g_dev_norule=false;      // development: the broker's commission rule is "unknown" on every symbol
 string     g_dev_calcfail="";       // development: OrderCalcProfit "fails" for this symbol
 bool       g_dev_nodeal=false;      // development: the entry deal of a position is not in the history
+double     g_dev_cin=-1.0;          // development: >= 0 is the commission paid at the entry per lot of every position (the history is not read)
 bool       g_dev_histbad=false;     // development: the history sum is off by 1.0
 bool       g_dev_fromstart_off=false; // development: the history is read as not reaching the start
 long       g_dev_fpshift=0;         // development: seconds added to the time of the first deposit, so the same account reads as another one
@@ -61,6 +62,7 @@ double PlPosCommPerLot(const ulong id,bool &known)
    const ulong now=GetTickCount64();
 #ifdef PL_DEV_LOG
    if(g_dev_nodeal) { known=false; return 0.0; }
+   if(g_dev_cin>=0.0) { known=true; return g_dev_cin; }
 #endif
    const int n=ArraySize(g_cm_id);
    for(int i=0;i<n;i++)
@@ -207,6 +209,24 @@ bool PlProfitAtPrice(const ENUM_ORDER_TYPE ot,const string sym,const double vol,
    return false;
   }
 
+//--- THE measure of an open position: the money if it closes at the price `to` now = the price move from OrderCalcProfit + the swap
+//--- - the commission still to pay at the exit x the volume (the entry commission is paid already, it is not in this number). The open
+//--- risk line sums the negatives of this at the SL, and the BE button of a position row hides on `>= 0` of the same call and
+//--- aims at the level where it holds, so the two never differ. false: unknown (the money cannot be valued, or the entry deal
+//--- is not in the history so the exit commission cannot be told): pl is 0 then and the caller must not treat it as a real zero.
+//--- Read every PositionGet* before the call: the commission reads may select another position.
+bool PlPlAtSl(const bool buy,const string sym,const double vol,const double open,const double to,const double swap,const ulong id,double &pl)
+  {
+   pl=0.0;
+   double p=0.0;
+   if(!PlProfitAtPrice(buy?ORDER_TYPE_BUY:ORDER_TYPE_SELL,sym,vol,open,to,p)) return false;
+   bool ck=false;
+   const double cin=PlPosCommPerLot(id,ck);
+   if(!ck) return false;
+   pl=p+swap-PlExitCommPerLot(sym,cin)*vol;
+   return true;
+  }
+
 //--- one pass over positions and pending orders
 void PlReadPositions()
   {
@@ -229,28 +249,14 @@ void PlReadPositions()
          const double vol=PositionGetDouble(POSITION_VOLUME);
          const ulong id=(ulong)PositionGetInteger(POSITION_IDENTIFIER);
          const double swp=PositionGetDouble(POSITION_SWAP);
-         double p=0.0;
          e.has_sl=true;
-         if(!PlProfitAtPrice(pt==POSITION_TYPE_BUY?ORDER_TYPE_BUY:ORDER_TYPE_SELL,sy,vol,PositionGetDouble(POSITION_PRICE_OPEN),sl,p))
+         //--- the one measure of the money at the SL (the BE button of the position row reads the same function)
+         if(!PlPlAtSl(pt==POSITION_TYPE_BUY,sy,vol,PositionGetDouble(POSITION_PRICE_OPEN),sl,swp,id,e.pl_at_sl))
            {
-            e.unknown=true; e.pl_at_sl=0.0; g_ex_unknown++;
+            e.unknown=true; e.pl_at_sl=0.0; g_ex_unknown++;     // the money cannot be valued, or the entry commission cannot be read: never a zero
             if(g_ex_unknown_sym=="") g_ex_unknown_sym=sy;
            }
-         else
-           {
-            bool ck=false;
-            const double cin=PlPosCommPerLot(id,ck);
-            if(!ck)      // the entry commission cannot be read: the loss at the SL is unknown, never a zero commission
-              {
-               e.unknown=true; e.pl_at_sl=0.0; g_ex_unknown++;
-               if(g_ex_unknown_sym=="") g_ex_unknown_sym=sy;
-              }
-            else
-              {
-               e.pl_at_sl=p+swp-PlExitCommPerLot(sy,cin)*vol;
-               if(e.pl_at_sl<0.0) g_ex_open_risk-=e.pl_at_sl;
-              }
-           }
+         else if(e.pl_at_sl<0.0) g_ex_open_risk-=e.pl_at_sl;
         }
       else g_ex_no_sl++;
       const int k=ArraySize(g_ex);

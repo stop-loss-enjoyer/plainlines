@@ -336,6 +336,7 @@ struct PlOwn
    datetime          expire;        // the order's expiration or the panel's (0 none)
    int               rec;           // index in g_rec or -1
    double            be;            // a position: its breakeven SL (PlBreakevenSl, commission and swap in), 0 when not known yet
+   bool              be_safe;       // a position: its SL is set and closing at it gives zero or more by the open risk measure (PlPlAtSl): the BE button hides
   };
 
 PlOwn   g_own[];
@@ -369,8 +370,11 @@ void PlOwnRefresh()
       const double swp=PositionGetDouble(POSITION_SWAP);
       o.pl=PositionGetDouble(POSITION_PROFIT)+swp;
       o.expire=0; o.rec=PlRecIndex(id); o.lim=0.0;
-      //--- the level of the BE now button: the button is live only where the click can move the SL
-      o.be=(o.rec>=0)?PlBreakevenSl(g_rec[o.rec],o.open,o.vol,swp,id,false):0.0;
+      //--- the BE now button: the level it aims at, and whether the SL stands safe already by the measure of the open risk line.
+      //--- All of it from the position itself (no record needed); every PositionGet* is read above, the commission reads below may select another position
+      o.be=PlBreakevenSl(o.sym,o.buy,o.open,o.vol,swp,id,false);
+      double pls=0.0;
+      o.be_safe=(o.sl>0.0 && PlPlAtSl(o.buy,o.sym,o.vol,o.open,o.sl,swp,id,pls) && pls>=0.0);
       g_own_pl+=o.pl; g_own_pos++;
       const int k=ArraySize(g_own);
       ArrayResize(g_own,k+1); g_own[k]=o;
@@ -391,7 +395,7 @@ void PlOwnRefresh()
       o.lim=(ot==ORDER_TYPE_BUY_STOP_LIMIT || ot==ORDER_TYPE_SELL_STOP_LIMIT)?OrderGetDouble(ORDER_PRICE_STOPLIMIT):0.0;
       o.sl=OrderGetDouble(ORDER_SL); o.tp=OrderGetDouble(ORDER_TP); o.pl=0.0;
       o.expire=(datetime)OrderGetInteger(ORDER_TIME_EXPIRATION);
-      o.rec=PlRecIndex(tk); o.be=0.0;
+      o.rec=PlRecIndex(tk); o.be=0.0; o.be_safe=false;
       if(o.rec>=0 && g_rec[o.rec].expire_at>0) o.expire=(datetime)g_rec[o.rec].expire_at;
       g_own_ord++;
       const int k=ArraySize(g_own);
@@ -429,28 +433,46 @@ bool PlSlAllowed(const string sym,const bool buy,const double px,const double ne
    return true;
   }
 
-//--- 0.0: not known yet (the entry deal is not in the history, or no tick size); the caller waits.
-//--- the SL of a breakeven: the entry plus the commission paid in and still to pay out, in ticks rounded up, plus the negative swap, plus one tick
-double PlBreakevenSl(const PlRec &r,const double open,const double vol,const double swap,const ulong id,const bool log=true)
+//--- 0.0: not known yet (the entry deal is not in the history, or no tick size, or the money cannot be valued); the caller waits.
+//--- The SL of a breakeven. It starts at the entry plus the commission paid in and still to pay out, in ticks rounded up, plus the
+//--- negative swap, plus one tick, then goes on tick by tick toward the profit until the money at that SL is zero or more by the
+//--- measure of the open risk line (PlPlAtSl), so a click on BE and the line "Open risk" never disagree. It never goes back
+//--- toward the loss. A position needs no record: the arguments are the position itself.
+#define PL_BE_STEPS 12             // rounds of the search for the level; each round moves by the whole shortfall
+double PlBreakevenSl(const string sym,const bool buy,const double open,const double vol,const double swap,const ulong id,const bool log=true)
   {
-   const double tk=PlTickOf(r.symbol);
-   const int dg=PlDigitsOf(r.symbol);
-   if(tk<=0.0) return 0.0;
-   const double tv=SymbolInfoDouble(r.symbol,SYMBOL_TRADE_TICK_VALUE_PROFIT);
+   const double tk=PlTickOf(sym);
+   const int dg=PlDigitsOf(sym);
+   if(tk<=0.0 || vol<=0.0) return 0.0;
+   const double tv=SymbolInfoDouble(sym,SYMBOL_TRADE_TICK_VALUE_PROFIT);
    double ticks=1.0;
    bool known=false;
    const double cpl=PlPosCommPerLot(id,known);
    if(!known) return 0.0;                         // the entry deal is not in the history yet (the commission is charged at the entry on some brokers): wait, never guess
-   const double cexit=PlExitCommPerLot(r.symbol,cpl);
+   const double cexit=PlExitCommPerLot(sym,cpl);
    const double cround=cpl+cexit;
    if(cround>0.0 && tv>0.0) ticks+=MathCeil(cround/tv-1e-9);
    //--- a negative swap already paid moves the breakeven further (read by the caller, while its position was selected: the commission rule above may select another)
    if(swap<0.0 && tv>0.0 && vol>0.0) ticks+=MathCeil(-swap/vol/tv-1e-9);
    const double off=ticks*tk;
-   const bool buy=(r.ptype==0);
-   if(log) { PLDBG("BEDBG "+r.symbol+" in_paid_lot="+DoubleToString(cpl,4)+" exit_per_lot="+DoubleToString(cexit,4)+" src="+PlExitCommSrcDev(r.symbol)+" round="+DoubleToString(cround,4)
-         +" swap="+DoubleToString(swap,2)+" tick_value="+DoubleToString(tv,5)+" ticks="+DoubleToString(ticks,0)+" off="+DoubleToString(off,PlDigitsOf(r.symbol))); }
-   return buy?PlTickUp(open+off,tk,dg):PlTickDown(open-off,tk,dg);     // away from the loss, on the grid: an averaged netting open may sit off it
+   double lv=buy?PlTickUp(open+off,tk,dg):PlTickDown(open-off,tk,dg);     // away from the loss, on the grid: an averaged netting open may sit off it
+   //--- the exact test: the money at this level by the one measure; short of zero, move by the shortfall in ticks (per tick from tick value, else one tick)
+   double pl=0.0;
+   int rounds=0;
+   bool ok=false;
+   for(;rounds<PL_BE_STEPS;rounds++)
+     {
+      const bool val=PlPlAtSl(buy,sym,vol,open,lv,swap,id,pl);              // not valued: a move of under a cent on a tiny lot, or no conversion; one tick on, and a level never valued stays unknown
+      if(val && pl>=0.0) { ok=true; break; }
+      const double per=(tv>0.0)?tv*vol:0.0;                                 // money of one tick of the whole position
+      const double n=(val && per>0.0)?MathMax(1.0,MathCeil(-pl/per-1e-9)):((per>0.0)?MathMax(1.0,MathCeil(0.01/per-1e-9)):1.0);     // not valued: on by the ticks worth a cent, then the shortfall is known
+      lv=buy?PlTickUp(lv+n*tk,tk,dg):PlTickDown(lv-n*tk,tk,dg);
+     }
+   if(!ok) lv=0.0;                                // not found in the rounds: unknown, never a guess
+   if(log) { PLDBG("BEDBG "+sym+" in_paid_lot="+DoubleToString(cpl,4)+" exit_per_lot="+DoubleToString(cexit,4)+" src="+PlExitCommSrcDev(sym)+" round="+DoubleToString(cround,4)
+         +" swap="+DoubleToString(swap,2)+" tick_value="+DoubleToString(tv,5)+" ticks="+DoubleToString(ticks,0)+" off="+DoubleToString(off,PlDigitsOf(sym))
+         +" rounds="+(string)rounds+" level="+DoubleToString(lv,dg)+" pl_at_level="+DoubleToString(pl,2)); }
+   return lv;
   }
 
 //=================================================================================================
@@ -658,7 +680,7 @@ bool PlRecManage(const int idx)
    const double curstop=cursl;                      // the stop that is moved
    if(g_rec[idx].be_on && !g_rec[idx].be_done && !g_rec[idx].be_off)
      {
-      const double nsl=PlBreakevenSl(g_rec[idx],open,vol,PositionGetDouble(POSITION_SWAP),id);
+      const double nsl=PlBreakevenSl(sym,buy,open,vol,PositionGetDouble(POSITION_SWAP),id);
       if(nsl<=0.0) return false;                    // the entry deal is not known yet: wait for the next tick, be_done stays false
       const bool better=(curstop<=0.0) || (buy?(nsl>curstop+tick*0.999):(nsl<curstop-tick*0.999));
       if(!better) { g_rec[idx].be_done=true; PlRecSave(g_rec[idx],PL_RW_MGR); }
@@ -923,21 +945,24 @@ void PlRecToggleTrail(const int own)
    PLDBG("BUTTON Trail toggle id="+(string)o.id+" now "+(string)g_rec[k].trail);
   }
 
-//--- "BE now": the SL goes to the breakeven level at once, when the price is past it
+//--- "BE now": the SL goes to the breakeven level at once, when the price is past it. The level and the "already" test are the
+//--- one measure of the open risk line (PlPlAtSl); no record of the position is needed (and none is made)
 void PlRecBreakevenNow(const int own)
   {
    if(own<0 || own>=ArraySize(g_own) || g_own[own].pending) return;
    const PlOwn o=g_own[own];
-   const int k=PlRecEnsure(o);
-   if(k<0) return;
    if(!PlFindPosition(o.id)) return;
    const double cursl=PositionGetDouble(POSITION_SL), curtp=PositionGetDouble(POSITION_TP);
    const double vol=PositionGetDouble(POSITION_VOLUME);
    const double opn=PositionGetDouble(POSITION_PRICE_OPEN);
-   const double nsl=PlBreakevenSl(g_rec[k],opn,vol,PositionGetDouble(POSITION_SWAP),o.id);
+   const double swp=PositionGetDouble(POSITION_SWAP);
+   const double nsl=PlBreakevenSl(o.sym,o.buy,opn,vol,swp,o.id);
    if(nsl<=0.0) { PlManageNote(PLS_BE_WAIT_DEAL,2); return; }
    const double px=SymbolInfoDouble(o.sym,o.buy?SYMBOL_BID:SYMBOL_ASK);
    const double tick=PlTickOf(o.sym);
+   //--- the SL already gives zero or more at the exit: nothing to do (the row hides the button at this moment); never loosened either
+   double pls=0.0;
+   if(cursl>0.0 && PlPlAtSl(o.buy,o.sym,vol,opn,cursl,swp,o.id,pls) && pls>=0.0) { PlManageNote(PLS_ALREADY_BE,0); return; }
    if(px<=0.0 || !(o.buy?(px>nsl+tick*0.999):(px<nsl-tick*0.999))) { PlManageNote(PLS_NOT_PAST_BE,2); return; }
    if(cursl>0.0 && !(o.buy?(nsl>cursl+tick*0.999):(nsl<cursl-tick*0.999))) { PlManageNote(PLS_ALREADY_BE,0); return; }
    PlSendRes res;

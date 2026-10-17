@@ -947,7 +947,7 @@ void PlHandleAct(const int id,const int arg)
          const int row=(g_panel.act_tid!=0)?PlOwnFind(g_panel.act_tid):-1;
          if(row<0) { g_key=""; g_panel.Redraw(); ChartRedraw(); return; }
          const PlOwn o=g_own[row];
-         if(btn==0) PlRecBreakevenNow(row);
+         if(btn==0) { PlRecBreakevenNow(row); PlOwnRefresh(); g_risk_dirty=true; }     // the row and the open risk line read the new SL at once
          else if(btn==1)
            {
             if(PlTradeBusy()) { PlMessage(PLS_BUSY,3500,2); }
@@ -1356,7 +1356,7 @@ void PlDevCommand(const string cmd)
       PLDBG("OWN pos="+(string)g_own_pos+" ord="+(string)g_own_ord+" pl="+DoubleToString(g_own_pl,2));
       for(int i=0;i<ArraySize(g_own);i++)
          PLDBG("OWN #"+(string)i+" id="+(string)g_own[i].id+" "+g_own[i].sym+" pending="+(string)g_own[i].pending+" vol="+DoubleToString(g_own[i].vol,2)
-               +" open="+DoubleToString(g_own[i].open,5)+" sl="+DoubleToString(g_own[i].sl,5)+" tp="+DoubleToString(g_own[i].tp,5)+" pl="+DoubleToString(g_own[i].pl,2)+" rec="+(string)g_own[i].rec);
+               +" open="+DoubleToString(g_own[i].open,5)+" sl="+DoubleToString(g_own[i].sl,5)+" tp="+DoubleToString(g_own[i].tp,5)+" pl="+DoubleToString(g_own[i].pl,2)+" rec="+(string)g_own[i].rec+" be="+DoubleToString(g_own[i].be,g_sym.digits)+" be_safe="+(string)g_own[i].be_safe);
      }
    else if(p[0]=="rec")
      {
@@ -1417,6 +1417,7 @@ void PlDevCommand(const string cmd)
      }
    else if(p[0]=="stale" && n>=2) g_dev_stale=(int)StringToInteger(p[1]);
    else if(p[0]=="nodeal") g_dev_nodeal=(n<2 || p[1]!="off");
+   else if(p[0]=="cin") { g_dev_cin=(n>=2)?StringToDouble(p[1]):-1.0; PlCommCacheReset(); g_risk_dirty=true; PLDBG("CMD cin "+DoubleToString(g_dev_cin,4)); }     // the entry commission per lot of every position, as if read from the history (no argument: off)
    else if(p[0]=="rejectall" && n>=2) g_tr_rejectall=(int)StringToInteger(p[1]);
    else if(p[0]=="noexp") g_dev_noexp=(n<2 || p[1]!="off");
    else if(p[0]=="expsec" && n>=2) g_dev_expsec=(int)StringToInteger(p[1]);
@@ -1652,10 +1653,10 @@ void PlDevPoll()
 
 #endif
 
-//--- the chart must not scroll under the panel: wheel over the menu, a drag of the header
+//--- the chart must not scroll under the panel or a price tag: wheel over the menu, a drag of the header, a drag of a tag
 void PlScrollGuard(const int mx,const int my)
   {
-   bool over=g_panel.Dragging() || g_panel.Inside(mx,my);
+   bool over=g_panel.Dragging() || g_panel.Inside(mx,my) || g_lab_w>=0 || PlLabelAt(mx,my)>=0;
    if(over && !g_scroll_held)
      {
       g_scroll_orig=(ChartGetInteger(0,CHART_MOUSE_SCROLL)!=0);
@@ -1716,7 +1717,7 @@ int OnInit()
      }
    PlReadPositions();
    g_acc.open_risk_money=g_ex_open_risk; g_acc.pending_risk_money=g_ex_pend_risk; g_acc.open_no_sl=g_ex_no_sl;
-   g_risk_dirty=false; g_t_risk=GetTickCount64(); g_hint_dirty=false; g_drag_w=-1; g_scroll_held=false;
+   g_risk_dirty=false; g_t_risk=GetTickCount64(); g_hint_dirty=false; g_drag_w=-1; g_scroll_held=false; g_lab_w=-1; g_lab_moved=false;
    g_panel.confirm_view=false;       // a new symbol or a restart never opens in the confirmation state
    if(g_lines_hid!=_Symbol) g_lines_hid="";     // the lines taken off after a fill are that symbol's alone
    if(!PlReadChartSymbol())
@@ -1774,6 +1775,7 @@ void OnDeinit(const int reason)
    EventKillTimer();
    GlobalVariableDel(PL_NOALGO_GV+(string)ChartID());       // every reason: this instance no longer says it cannot trade
    PlScrollRestore();
+   g_lab_w=-1;
    if(g_ready)
      {
       if(g_prof_dirty && !PlProfLoading() && g_prof_state!=PL_PS_BAD && g_fp_found) PlProfileSave(true);   // a failed user write goes first
@@ -2062,6 +2064,33 @@ void PlLiveDrag()
    ChartRedraw();
   }
 
+//--- a line was moved by the mouse (dragged: dropped) or its price was typed into the properties window: the same
+//--- path for the line itself and for its price tag
+void PlLineMoved(const int w,const bool dragged)
+  {
+   if(w==2 && g_cfg.atr_on) PlMessage(PLS_SL_FOLLOWS_ATR,3500,0);
+   PlLinesPull();
+   PlLinesSnap();
+   //--- a dragged TP is a price now, not an R multiple
+   if(w>=3) g_dr.tp_price[w-3]=true;
+   if(w==0 || w==2) PlAutoKind(w==0,true,dragged?PlMarketTol():2.0*g_sym.tick_size);
+   g_lbtn=false; g_drag_w=-1;
+   PLDBG("ACT line "+(dragged?"dragged ":"changed ")+PlLineName(w));
+   PlModelChanged();
+  }
+
+//--- the button is up after a price tag held its line: the drop
+void PlLabelRelease()
+  {
+   const int w=g_lab_w;
+   g_lab_w=-1;
+   if(w<0 || !g_lab_moved) return;
+   g_lab_moved=false;
+   if(!PlLineShown(w)) return;
+   PlStickyClear();
+   PlLineMoved(w,true);
+  }
+
 void OnChartEvent(const int id,const long &lparam,const double &dparam,const string &sparam)
   {
    if(!g_ready) return;
@@ -2072,7 +2101,13 @@ void OnChartEvent(const int id,const long &lparam,const double &dparam,const str
          int mx=(int)lparam, my=(int)dparam;
          int fl=(int)StringToInteger(sparam);
          bool left=((fl&1)!=0);
-         if(left && !g_lbtn) { g_press_in_panel=g_panel.Inside(mx,my); if(g_press_in_panel) PlStickyClear(); }
+         if(left && !g_lbtn)
+           {
+            g_press_in_panel=g_panel.Inside(mx,my);
+            if(g_press_in_panel) PlStickyClear();
+            else PlLabelPress(mx,my);
+           }
+         const bool lab_up=(!left && g_lab_w>=0);
          g_lbtn=left;
          if(!left) g_drag_w=-1;
          PlScrollGuard(mx,my);
@@ -2090,7 +2125,9 @@ void OnChartEvent(const int id,const long &lparam,const double &dparam,const str
             PlSettingsSave();
             PLDBG("ACT panel moved "+(string)g_cfg.px+","+(string)g_cfg.py);
            }
+         if(left && g_lab_w>=0) PlLabelFollow(mx,my);
          if(left && !g_panel.Dragging() && !g_press_in_panel) PlLiveDrag();
+         if(lab_up) { PlLabelRelease(); PlScrollGuard(mx,my); }
          break;
         }
       case CHARTEVENT_OBJECT_DRAG:
@@ -2106,15 +2143,7 @@ void OnChartEvent(const int id,const long &lparam,const double &dparam,const str
             PLDBG("ACT line drag from the panel ignored "+sparam);
             break;
            }
-         if(w==2 && g_cfg.atr_on) PlMessage(PLS_SL_FOLLOWS_ATR,3500,0);
-         PlLinesPull();
-         PlLinesSnap();
-         //--- a dragged TP is a price now, not an R multiple
-         if(w>=3) g_dr.tp_price[w-3]=true;
-         if(w==0 || w==2) PlAutoKind(w==0,true,(id==CHARTEVENT_OBJECT_DRAG)?PlMarketTol():2.0*g_sym.tick_size);
-         g_lbtn=false; g_drag_w=-1;
-         PLDBG("ACT line "+(id==CHARTEVENT_OBJECT_DRAG?"dragged ":"changed ")+sparam);
-         PlModelChanged();
+         PlLineMoved(w,id==CHARTEVENT_OBJECT_DRAG);
          break;
         }
       case CHARTEVENT_OBJECT_ENDEDIT:

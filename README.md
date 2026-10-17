@@ -12,7 +12,7 @@ https://github.com/user-attachments/assets/33eb0862-52e2-4045-adbe-e0c19ad5a353
 
 Free for your own trading, prop firm accounts included. Plainlines gives no signals and is not investment advice: you decide every trade.
 
-**Version 0.9.0** (shown as 0.90 in the terminal). Tested on demo accounts and used in live trading on a real broker account (Bybit) and a real prop firm account (FTMO), on Linux under Wine; Windows and macOS have not been checked yet. What was and was not tried is in [COMPATIBILITY.md](COMPATIBILITY.md).
+**Version 0.9.1** (shown as 0.91 in the terminal). Tested on demo accounts and used in live trading on a real broker account (Bybit) and a real prop firm account (FTMO), on Linux under Wine; Windows and macOS have not been checked yet. What was and was not tried is in [COMPATIBILITY.md](COMPATIBILITY.md).
 
 ## Install
 
@@ -116,7 +116,7 @@ Open an issue in [Issues](../../issues). For security problems see [SECURITY.md]
 
 ## License
 
-Free to use, including your own trading on personal and prop firm accounts. Source-available under PolyForm Shield 1.0.0, see [LICENSE](LICENSE): you may read, change and share it, but you may not sell it or offer a competing product built from it. This is source-available software, not open source.
+Free to use, including your own trading on personal and prop firm accounts. Source-available under the PolyForm Shield license (license version 1.0.0, see [LICENSE](LICENSE)): you may read, change and share it, but you may not sell it or offer a competing product built from it. This is source-available software, not open source.
 
 For a commercial license (bundling or distributing Plainlines under your name), write to sl.enjoyer@pm.me.
 

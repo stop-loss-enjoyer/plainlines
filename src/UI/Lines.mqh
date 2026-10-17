@@ -115,10 +115,10 @@ color PlLineColor(const int w)
    return to;
   }
 
-//--- one device pixel is a thin line on a scaled screen: width 2 above scale 100
+//--- a line has to be easy to grab with the mouse: width 2, and 3 above scale 100 (one device pixel is thin on a scaled screen)
 int PlLineWidth()
   {
-   return (PlScaleGet(g_cfg.scale)<=1.0)?1:2;
+   return (PlScaleGet(g_cfg.scale)<=1.0)?2:3;
   }
 
 int g_ln_sig=-1;      // chart background and width the lines on the chart carry now (-1: not set yet)
@@ -276,6 +276,10 @@ string g_lb_text[PL_LN_COUNT];
 int    g_lb_top[PL_LN_COUNT];
 bool   g_lb_on[PL_LN_COUNT];
 string g_lb_sig[PL_LN_COUNT];     // what the label objects were last given (text, place, colors); "" = hidden or not drawn
+int    g_lb_x0[PL_LN_COUNT], g_lb_y0[PL_LN_COUNT], g_lb_x1[PL_LN_COUNT], g_lb_y1[PL_LN_COUNT];   // the backing box as drawn (valid while g_lb_sig is not "")
+int    g_lab_w=-1;                // the price tag the left button holds right now (-1 none): the tag drags its line
+int    g_lab_dy=0;                // pointer y minus line y at the press, so the line does not jump to the pointer
+bool   g_lab_moved=false;         // the held tag has moved its line
 
 int PlLabelHeight()
   {
@@ -362,6 +366,8 @@ void PlLabelsFlush()
       ObjectSetInteger(0,bg,OBJPROP_YSIZE,(int)th+2*pady);
       ObjectSetInteger(0,bg,OBJPROP_XDISTANCE,cw-8-(int)tw-padx);
       ObjectSetInteger(0,bg,OBJPROP_YDISTANCE,g_lb_top[w]-pady);
+      g_lb_x0[w]=cw-8-(int)tw-padx; g_lb_y0[w]=g_lb_top[w]-pady;
+      g_lb_x1[w]=g_lb_x0[w]+(int)tw+2*padx; g_lb_y1[w]=g_lb_y0[w]+(int)th+2*pady;
       ObjectSetInteger(0,bg,OBJPROP_TIMEFRAMES,OBJ_ALL_PERIODS);
       ObjectSetInteger(0,nm,OBJPROP_COLOR,lc);
       ObjectSetInteger(0,nm,OBJPROP_FONTSIZE,9);
@@ -371,6 +377,51 @@ void PlLabelsFlush()
       ObjectSetInteger(0,nm,OBJPROP_TIMEFRAMES,OBJ_ALL_PERIODS);
       g_lb_sig[w]=sig;
      }
+  }
+
+//--- a price tag holds its line: the left button down on the tag and moving up or down moves the line, through the
+//--- same path as a drag of the line itself (the caller does the live step and the end of the drag). The chart
+//--- does not scroll meanwhile: PlScrollGuard keeps CHART_MOUSE_SCROLL off over a tag and while one is held.
+
+//--- the tag under the pointer (-1 none)
+int PlLabelAt(const int mx,const int my)
+  {
+   for(int w=0;w<PL_LN_COUNT;w++)
+     {
+      if(!g_lb_on[w] || g_lb_sig[w]=="") continue;
+      if(mx>=g_lb_x0[w] && mx<g_lb_x1[w] && my>=g_lb_y0[w] && my<g_lb_y1[w]) return w;
+     }
+   return -1;
+  }
+
+//--- the left button went down at mx,my: hold the tag there, if any
+bool PlLabelPress(const int mx,const int my)
+  {
+   g_lab_w=-1; g_lab_moved=false;
+   const int w=PlLabelAt(mx,my);
+   if(w<0 || !PlLineShown(w) || ObjectFind(0,PlLineName(w))<0) return false;
+   int x=0,y=0;
+   if(!ChartTimePriceToXY(0,0,TimeCurrent(),PlPxGet(w),x,y)) return false;
+   g_lab_w=w; g_lab_dy=my-y;
+   return true;
+  }
+
+//--- the pointer moved with the button down: put the held line at the pointer
+void PlLabelFollow(const int mx,const int my)
+  {
+   if(g_lab_w<0) return;
+   const string nm=PlLineName(g_lab_w);
+   if(ObjectFind(0,nm)<0) { g_lab_w=-1; return; }
+   int y=my-g_lab_dy;
+   const int ch=(int)ChartGetInteger(0,CHART_HEIGHT_IN_PIXELS);
+   if(y<0) y=0;
+   if(y>ch-1) y=ch-1;
+   datetime t=0; double p=0.0; int sw=0;
+   if(!ChartXYToTimePrice(0,mx,y,sw,t,p) || p<=0.0) return;
+   const double tol=(g_sym.tick_size>0.0)?g_sym.tick_size/4.0:1e-9;
+   if(MathAbs(ObjectGetDouble(0,nm,OBJPROP_PRICE)-p)<=tol) return;
+   ObjectSetDouble(0,nm,OBJPROP_PRICE,p);
+   g_lab_moved=true;
   }
 
 //--- text of the labels from the latest result

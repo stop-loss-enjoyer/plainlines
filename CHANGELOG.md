@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.9.1 (2026-10-17)
+
+- The BE now button of a position row shows while closing the position at its SL would still lose money, by the same measure as the Open risk line, and the click moves the SL to the level where that measure is zero or more, so the button and Open risk never disagree. Before, the button hid at an SL one tick past the open even when the commission and the swap still made the position a loss (it showed Open risk with no button), and a position without a record of the panel had no commission or swap in the level.
+- The lines on the chart are thicker (2 px, 3 px above panel scale 100), so they are easier to grab with the mouse. The dashed TP2 and TP3 stay dashed.
+- A line can be dragged by its price tag too. The line follows the pointer, the chart does not scroll, and the order type changes while you drag Entry or SL just as when you drag the line.
+
 ## 0.9.0 (2026-10-17)
 
 First public release. The terminal shows this version as 0.90 (for example "0.90 demo" in the Look section of a build you compile yourself).

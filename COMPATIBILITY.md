@@ -1,6 +1,6 @@
 # Compatibility
 
-State as of October 2026 (written on 15 October 2026, updated on 17 October 2026), for version 0.9.0 (shown as 0.90 in the terminal). Terminal builds change. This page is a record of what was checked on that date, not a promise. The checks of 0.9.0 below were done on demo accounts or by reading data without trading. Plainlines is also used by the author in live trading on a real broker account (Bybit) and a real prop firm account (FTMO).
+State as of October 2026 (written on 15 October 2026, updated on 17 October 2026), for version 0.9.1 (shown as 0.91 in the terminal; the checks below name the version they were made with). Terminal builds change. This page is a record of what was checked on that date, not a promise. The checks of 0.9.0 below were done on demo accounts or by reading data without trading. Plainlines is also used by the author in live trading on a real broker account (Bybit) and a real prop firm account (FTMO).
 
 ## Terminal and platform
 

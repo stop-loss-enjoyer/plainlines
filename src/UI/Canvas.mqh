@@ -1786,27 +1786,24 @@ double CPlPanel::BuildPositions(double y)
       Reg(H_ROW_EXP,i,PL_PAD,y,PL_W-PL_PAD-30,y+36);
       const bool armed=PlCbArmed(1,o.id);
       Reg(H_ROW_X,i,PL_W-PL_PAD-26,y+4,PL_W-PL_PAD,y+30);
-      //--- the breakeven chip at the right of the second line: one click moves the SL to the open plus the commission
-      //--- in and out, the negative swap paid and a tick (PlRecBreakevenNow, the exact check is there). Hidden for an order and once
-      //--- the SL is on the profit side of the open by a tick (done, by anyone); muted while the price is not past the open, and the
-      //--- click then says why. Registered after the row, so it takes the click; the hit area is taller than the chip
+      //--- the breakeven chip at the right of the second line: one click moves the SL to the breakeven level (PlBreakevenSl: the open plus
+      //--- the commission in and out, the negative swap paid and a tick, then on tick by tick until closing at it gives zero or more by the
+      //--- measure of the Open risk line, PlPlAtSl). Hidden for an order and once closing at the SL of the position already gives zero or more
+      //--- by that same measure (be_safe, so the chip and the Open risk line never disagree, whoever set the SL); shown while it would still
+      //--- lose money. Live (bright) only when the price is past the level; else muted, and the click then says why. A level not known yet
+      //--- (the entry deal is not in the history, the money cannot be valued) makes it muted and promises nothing. Registered after
+      //--- the row, so it takes the click; the hit area is taller than the chip
       bool chip=false, chip_live=false;
       double chx1=0.0;
       const double chx2=PL_W-PL_PAD-34;
-      if(!o.pending)
+      if(!o.pending && !o.be_safe)
         {
-         //--- the level is the breakeven SL when it is known (commission and swap in), else the open; the same tests as the click
          const double tk=PlTickOf(o.sym);
-         const double lv=(o.be>0.0)?o.be:(o.buy?o.open+tk:o.open-tk);
-         const bool done=(o.sl>0.0 && (o.buy?(o.sl>=lv-tk*0.001):(o.sl<=lv+tk*0.001)));
-         if(!done)
-           {
-            chip=true;
-            const double cpx=SymbolInfoDouble(o.sym,o.buy?SYMBOL_BID:SYMBOL_ASK);
-            chip_live=(cpx>0.0 && (o.buy?(cpx>lv+tk*0.999):(cpx<lv-tk*0.999)));
-            chx1=chx2-(TextW(PLS_BE_NOW,FN_UI,80)+18);
-            Reg(H_ROW_BTN,i*8+0,chx1,y+15,chx2,y+39);
-           }
+         chip=true;
+         const double cpx=SymbolInfoDouble(o.sym,o.buy?SYMBOL_BID:SYMBOL_ASK);
+         chip_live=(o.be>0.0 && cpx>0.0 && (o.buy?(cpx>o.be+tk*0.999):(cpx<o.be-tk*0.999)));
+         chx1=chx2-(TextW(PLS_BE_NOW,FN_UI,80)+18);
+         Reg(H_ROW_BTN,i*8+0,chx1,y+15,chx2,y+39);
         }
       if(!m_dry)
         {
