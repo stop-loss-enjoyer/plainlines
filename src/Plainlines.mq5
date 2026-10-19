@@ -73,6 +73,8 @@ bool     g_risk_dirty=true;         // open positions or orders changed: work ou
 ulong    g_t_risk=0;
 bool     g_scroll_orig=true;        // CHART_MOUSE_SCROLL as the user had it
 bool     g_scroll_held=false;       // we switched it off while the pointer is on the panel
+bool     g_dtl_orig=true;           // CHART_DRAG_TRADE_LEVELS as the user had it
+bool     g_dtl_held=false;          // we switched it off while the pointer is on a plan line that lies on a level of MT5
 string   g_confirm_sig="";          // plan the confirmation was asked for
 string   g_confirm_net="";          // its netting position part, to say why it lapsed
 bool     g_arm_conn=true;           // connection state when the confirmation was asked for
@@ -280,12 +282,82 @@ string PlKey()
   }
 
 //--- first prices of the lines from the market and a distance ---------------------------------------
+#define PL_LIVE_GAP_PX 8          // a plan line nearer than this to a level of MT5 loses the drag to it
+
+//--- a line of the plan lies on a level of a live position or order of this symbol (open price, SL, TP): MT5 takes the drag of a
+//--- level before any object of the chart (OBJPROP_ZORDER does not change it, demo stand 19.10.2026), so the plan line could not be moved
+//--- the price of PL_LIVE_GAP_PX pixels on this chart now; 0 when the chart has no scale yet
+double PlLiveGap()
+  {
+   const double h=(double)ChartGetInteger(0,CHART_HEIGHT_IN_PIXELS);
+   const double span=ChartGetDouble(0,CHART_PRICE_MAX)-ChartGetDouble(0,CHART_PRICE_MIN);
+   if(h<=0.0 || span<=0.0) return 0.0;
+   return span/h*PL_LIVE_GAP_PX;
+  }
+
+//--- the levels MT5 draws for this symbol: open price, SL and TP of every position, price, stop-limit price, SL and TP of every order
+int PlLiveLevels(double &lv[])
+  {
+   ArrayResize(lv,0);
+   int n=0;
+   for(int i=PositionsTotal()-1;i>=0;i--)
+     {
+      if(PositionGetTicket(i)==0 || PositionGetString(POSITION_SYMBOL)!=_Symbol) continue;
+      ArrayResize(lv,n+3);
+      lv[n++]=PositionGetDouble(POSITION_PRICE_OPEN); lv[n++]=PositionGetDouble(POSITION_SL); lv[n++]=PositionGetDouble(POSITION_TP);
+     }
+   for(int i=OrdersTotal()-1;i>=0;i--)
+     {
+      if(OrderGetTicket(i)==0 || OrderGetString(ORDER_SYMBOL)!=_Symbol) continue;
+      ArrayResize(lv,n+4);
+      lv[n++]=OrderGetDouble(ORDER_PRICE_OPEN); lv[n++]=OrderGetDouble(ORDER_PRICE_STOPLIMIT); lv[n++]=OrderGetDouble(ORDER_SL); lv[n++]=OrderGetDouble(ORDER_TP);
+     }
+   return n;
+  }
+
+//--- a level of MT5 lies within the gap of this price
+bool PlLiveLevelNear(const double p,const double gap,const double &lv[],const int n)
+  {
+   for(int j=0;j<n;j++) if(lv[j]>0.0 && MathAbs(lv[j]-p)<=gap) return true;
+   return false;
+  }
+
+bool PlPlanOnLiveLevel()
+  {
+   const double gap=PlLiveGap();
+   if(gap<=0.0) return false;
+   double lv[];
+   const int n=PlLiveLevels(lv);
+   for(int w=0;w<PL_LN_COUNT;w++)
+     {
+      if(!PlLineWanted(w)) continue;
+      const double p=PlPxGet(w);
+      if(p<=0.0) continue;
+      if(PlLiveLevelNear(p,gap,lv,n)) return true;
+     }
+   return false;
+  }
+
+//--- first prices of the lines from the market and a distance. A pending entry the panel sets itself steps further from the price
+//--- while a line would lie on a level of a live order or position (NDX100 19.10.2026: the default Limit after a Limit just placed
+//--- fell on its levels, and the eye brought the plan back where MT5 took every drag). A market entry is the price and stays
 void PlSetupPrices(const double dist,const int dir,const PlKind kind)
+  {
+   const double tk=g_sym.tick_size;
+   const double off=PlTickRound(MathMax(PlTickRound(MathMax(dist,3.0*tk))*0.5,3.0*tk));
+   for(int k=0;k<6;k++)
+     {
+      PlSetupPricesAt(dist,dir,kind,off*(1+k));
+      if(kind==PL_KIND_MARKET || !PlPlanOnLiveLevel()) return;
+     }
+   PlSetupPricesAt(dist,dir,kind,off);         // no clear place within six steps: the plain one
+  }
+
+void PlSetupPricesAt(const double dist,const int dir,const PlKind kind,const double off)
   {
    double mid=(g_sym.ask+g_sym.bid)/2.0;
    double tk=g_sym.tick_size;
    double d=PlTickRound(MathMax(dist,3.0*tk));
-   double off=PlTickRound(MathMax(d*0.5,3.0*tk));
    double exec=0;
    g_px.entry=0; g_px.limit=0;
    switch(kind)
@@ -353,6 +425,22 @@ bool PlQuoteReady()
    return (g_sym.bid>0.0 && g_sym.ask>0.0 && g_sym.tick_size>0.0 && g_sym.point>0.0);
   }
 
+//--- new prices of the lines from the saved distance, side and type, around the price now
+void PlSeedPrices()
+  {
+   double d=MathAbs(g_dr.sl_ticks)*g_sym.tick_size;
+   //--- a saved distance that makes no sense for the price (another instrument's file, a changed contract)
+   if(d>(g_sym.ask+g_sym.bid)/2.0*0.10) d=0.0;
+   if(d<=0.0) PlDefaultLines(g_sym,g_cfg.max_spread/100.0,d);
+   int dir=(g_dr.sl_ticks>0.0)?-1:1;
+   PlSetupPrices(d,dir,g_dr.kind);
+   if(g_dr.tp_price[0] && g_dr.tp_ticks!=0.0)
+     {
+      double exec=(g_dr.kind==PL_KIND_STOP_LIMIT)?g_px.limit:g_px.entry;
+      g_px.tp[0]=PlTickRound(exec+g_dr.tp_ticks*g_sym.tick_size);
+     }
+  }
+
 //--- first prices: lines of this symbol already on the chart, or new ones from the saved distance
 bool PlInitPrices()
   {
@@ -360,17 +448,7 @@ bool PlInitPrices()
    if(!adopted)
      {
       PlLinesDeleteAll();
-      double d=MathAbs(g_dr.sl_ticks)*g_sym.tick_size;
-      //--- a saved distance that makes no sense for the price (another instrument's file, a changed contract)
-      if(d>(g_sym.ask+g_sym.bid)/2.0*0.10) d=0.0;
-      if(d<=0.0) PlDefaultLines(g_sym,g_cfg.max_spread/100.0,d);
-      int dir=(g_dr.sl_ticks>0.0)?-1:1;
-      PlSetupPrices(d,dir,g_dr.kind);
-      if(g_dr.tp_price[0] && g_dr.tp_ticks!=0.0)
-        {
-         double exec=(g_dr.kind==PL_KIND_STOP_LIMIT)?g_px.limit:g_px.entry;
-         g_px.tp[0]=PlTickRound(exec+g_dr.tp_ticks*g_sym.tick_size);
-        }
+      PlSeedPrices();
      }
    else
      {
@@ -684,6 +762,11 @@ void PlFlowAfterSend()
          //--- the lines of the plan lie on the levels of the new position or order, and a drag there would take the level of MT5: they go,
          //--- the eye brings them back for the next trade
          if(good && PlLinesOn()) { g_lines_hid=_Symbol; PLDBG("ACT lines hidden after a fill"); if(g_prices_ok) { PlLinesSync(); PlLinesLabels(); } }
+         //--- the plan is spent: the next one starts around the price with the same distance, side and type, a pending entry clear of the
+         //--- levels of the order just placed (PlSetupPrices), so the eye does not bring the lines back where MT5 takes every drag (NDX100
+         //--- 19.10.2026). A market fill lies at the price, its levels part from the plan once the price moves
+         if(good && g_prices_ok) { PlSeedPrices(); PlSideSeed(); PlRecalc(); PLDBG("ACT plan reseeded after a send"); }
+         if(g_sres.status==PL_SS_PLACED) PlSoundPlaced();
         }
      }
    PlFlowSync();
@@ -1707,6 +1790,47 @@ void PlScrollRestore()
    if(g_scroll_held) { ChartSetInteger(0,CHART_MOUSE_SCROLL,g_scroll_orig); g_scroll_held=false; }
   }
 
+//--- the plan line under the pointer wins the drag: MT5 takes the drag of its own trade level before any object of the chart, so a plan
+//--- line lying on a level of a live order or position could not be moved, and the drag modified the real order instead (NDX100
+//--- 19.10.2026). While the pointer is on a plan line with a level of MT5 under it, the levels of this chart do not drag; anywhere else
+//--- they drag as the user set it. Not while a button is down: a drag keeps the state it started with
+void PlTradeLevelsGuard(const int mx,const int my,const bool left)
+  {
+   if(left) return;
+   bool over=false;
+   if(PlLinesOn() && g_prices_ok && g_place_mode<0 && !g_place_hold && !g_panel.Inside(mx,my))
+     {
+      const double gap=PlLiveGap();
+      const double top=ChartGetDouble(0,CHART_PRICE_MAX);
+      double lv[];
+      const int n=(gap>0.0)?PlLiveLevels(lv):0;
+      for(int w=0;w<PL_LN_COUNT && n>0 && !over;w++)
+        {
+         if(!PlLineShown(w)) continue;
+         const double p=PlPxGet(w);
+         if(p<=0.0) continue;
+         const double dy=MathAbs((top-p)/gap*PL_LIVE_GAP_PX-my);        // the pixel row of the line from the price scale of the chart
+         if(dy<=PL_LIVE_GAP_PX && PlLiveLevelNear(p,gap,lv,n)) over=true;
+        }
+     }
+   if(over && !g_dtl_held)
+     {
+      g_dtl_orig=(ChartGetInteger(0,CHART_DRAG_TRADE_LEVELS)!=0);
+      if(g_dtl_orig) ChartSetInteger(0,CHART_DRAG_TRADE_LEVELS,false);
+      g_dtl_held=true;
+      PLDBG("DTL off: plan line on a level of MT5 under the pointer");
+     }
+   else if(!over && g_dtl_held) PlTradeLevelsRestore();
+  }
+
+void PlTradeLevelsRestore()
+  {
+   if(!g_dtl_held) return;
+   ChartSetInteger(0,CHART_DRAG_TRADE_LEVELS,g_dtl_orig);
+   g_dtl_held=false;
+   PLDBG("DTL back="+(string)g_dtl_orig);
+  }
+
 //=================================================================================================
 int OnInit()
   {
@@ -1810,7 +1934,21 @@ void OnDeinit(const int reason)
    if(g_ready) PlPlaceEnd("deinit",2);      // before the draft is saved: the lines go back to where they stood, also for the adopted lines of a symbol change
    PlPlaceCtxBack(true);                    // the right-click menu of the chart, whatever the reason
    PlScrollRestore();
+   PlTradeLevelsRestore();
    g_lab_w=-1;
+   //--- the lines stay only when this advisor starts again on this chart at once: a symbol or timeframe change, new
+   //--- parameters, a recompile, an account change. OnInit then adopts them (same symbol, PlInitPrices) or clears them
+   //--- (another symbol), also on the first tick when there is no quote yet. Every other reason (a template, a failed
+   //--- start, a closed chart or terminal, removal, ExpertRemove) leaves the lines without an owner: they go with the labels,
+   //--- first of all and without asking ObjectFind: on a removal it answers "no such object" now and then while the lines are on the
+   //--- chart (demo stand 19.10.2026, 3 removals of 10 with a pending order live), and the lines stayed without the advisor (a user report)
+   const bool keep=(reason==REASON_CHARTCHANGE || reason==REASON_PARAMETERS || reason==REASON_RECOMPILE || reason==REASON_ACCOUNT);
+   for(int w=0;w<PL_LN_COUNT;w++)
+     {
+      PlLabelDelete(w);                     // with keep only the labels go, they are drawn again
+      if(!keep) ObjectDelete(0,PlLineName(w));
+     }
+   ChartRedraw();
    if(g_ready)
      {
       if(g_prof_dirty && !PlProfLoading() && g_prof_state!=PL_PS_BAD && g_fp_found) PlProfileSave(true);   // a failed user write goes first
@@ -1820,21 +1958,6 @@ void OnDeinit(const int reason)
    PLDBG("DEINIT reason="+(string)reason);
    g_panel.Destroy();
    ObjectDelete(0,"PL_Mark");
-   //--- the lines stay only when this advisor starts again on this chart at once: a symbol or timeframe change, new
-   //--- parameters, a recompile, an account change. OnInit then adopts them (same symbol, PlInitPrices) or clears them
-   //--- (another symbol), also on the first tick when there is no quote yet. Every other reason (a template, a failed
-   //--- start, a closed chart or terminal, removal, ExpertRemove) leaves the lines without an owner: they go with the labels.
-   switch(reason)
-     {
-      case REASON_CHARTCHANGE:
-      case REASON_PARAMETERS:
-      case REASON_RECOMPILE:
-      case REASON_ACCOUNT:
-         for(int w=0;w<PL_LN_COUNT;w++) PlLabelDelete(w);          // only the labels go, they are drawn again
-         break;
-      default:
-         PlLinesDeleteAll();
-     }
    if(g_atr_h!=INVALID_HANDLE) { IndicatorRelease(g_atr_h); g_atr_h=INVALID_HANDLE; }
    g_ready=false;
    PlDevClose();
@@ -2344,6 +2467,7 @@ void OnChartEvent(const int id,const long &lparam,const double &dparam,const str
          g_lbtn=left;
          if(!left) g_drag_w=-1;
          PlScrollGuard(mx,my);
+         PlTradeLevelsGuard(mx,my,left);
          g_panel.OnMouse(mx,my,fl);
          if(g_panel.act_id!=0)
            {

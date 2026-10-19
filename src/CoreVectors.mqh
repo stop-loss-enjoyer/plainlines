@@ -7041,7 +7041,87 @@ void PlVec164(PlVector &v)
    PlVecStaleAge(v,200,false,"stale_crypto_200s_open","BTCUSD (crypto), last tick 200 s old on an open session: not stale (the limit is 300 s), the vector 08 numbers");
   }
 
-int PlVectorCount() { return(158); }
+//+------------------------------------------------------------------+
+//| 165 xauusd_tick_value_per_unit
+//| XAUUSD as a FundingPips server shows it (19.10.2026): contract 100, tick 0.01, but the published tick value 0.01 (one tick of ONE
+//| unit, not of a lot). OrderCalcProfit books 500 for 500 ticks of 1 lot. The two differ by exactly the contract: the tick values
+//| are scaled to the terminal's loss (PlTickValueFix), the vector 06 numbers come out, with a 1R TP: reward 100, rr 1.
+//|   (a) after the fix = 500 * 1 = 500, (c) 500, lot 0.2, risk 100, spread 0.43/0.01 * 1 * 0.2 = 8.6.
+//+------------------------------------------------------------------+
+void PlVec165(PlVector &v)
+  {
+   PlVec06(v);
+   v.name="xauusd_tick_value_per_unit";
+   v.what="XAUUSD with the tick value per unit (FundingPips 19.10.2026): scaled to OrderCalcProfit, lot 0.20, reward 100, R 1";
+   v.s.tick_value_loss=0.01;
+   v.s.tick_value_profit=0.01;
+   v.in.no_tp=false;
+   v.in.tp[0].on=true; v.in.tp[0].mode=PL_TP_R; v.in.tp[0].r=1.0; v.in.tp[0].price=0.0; v.in.tp[0].share=100.0;
+   v.exp_reward_total=100.0;
+   v.exp_rr=1.0;
+  }
+
+//+------------------------------------------------------------------+
+//| 166 xagusd_tick_value_per_unit
+//| XAGUSD as a user's FundingPips terminal shows it: contract 5000, tick 0.001, published tick price 0.5 (5.00 per lot), OrderCalcProfit 1000
+//| for 200 ticks of 1 lot: the tick value is the odd one out by a factor 10, not the contract.
+//|   SL 0.200 below Ask 50.030: ticks 200, (a) after the fix 200 * 5 = 1000, (c) 1000, lot_raw 100 / 1000 = 0.1, lot 0.1, risk 100.
+//|   spread 0.030/0.001 * 5 * 0.1 = 15.
+//+------------------------------------------------------------------+
+void PlVec166(PlVector &v)
+  {
+   PlVec06(v);
+   v.name="xagusd_tick_value_per_unit";
+   v.what="XAGUSD tick price 0.5 at contract 5000 (FundingPips): scaled to OrderCalcProfit, lot 0.10, reward 100, R 1";
+   v.s.name="XAGUSD";
+   v.s.digits=3; v.s.point=0.001; v.s.tick_size=0.001; v.s.contract=5000.0;
+   v.s.tick_value_loss=0.5; v.s.tick_value_profit=0.5;
+   v.s.bid=50.000; v.s.ask=50.030;
+   v.s.margin_buy_1lot=12507.5; v.s.margin_sell_1lot=12500.0;
+   v.s.swap_long=0.0; v.s.swap_short=0.0;
+   v.in.sl=49.830;
+   v.in.calcprofit_loss_1lot=1000.0;
+   v.in.no_tp=false;
+   v.in.tp[0].on=true; v.in.tp[0].mode=PL_TP_R; v.in.tp[0].r=1.0; v.in.tp[0].price=0.0; v.in.tp[0].share=100.0;
+   v.exp_exec=50.030;
+   v.exp_sl=49.830;
+   v.exp_ticks=200;
+   v.exp_lpl_a=1000.0;
+   v.exp_lpl_price=1000.0;
+   v.exp_loss_per_lot=1000.0;
+   v.exp_lot=0.1;
+   v.exp_risk_money=100.0;
+   v.exp_risk_percent=1.0;
+   v.exp_margin_needed=1250.75;
+   v.exp_spread_points=30.0;
+   v.exp_spread_money=15.0;
+   v.exp_reward_total=100.0;
+   v.exp_rr=1.0;
+  }
+
+//+------------------------------------------------------------------+
+//| 167 xauusd_tick_value_off_unexplained
+//| XAUUSD with the published tick value 0.02 and OrderCalcProfit 480 for 500 ticks: neither the tick value (10) nor the move x contract
+//| (500) gives the terminal's loss, nothing explains it: BLOCK PL_R_PATHS_DISAGREE as before, numbers by the worst path (480).
+//+------------------------------------------------------------------+
+void PlVec167(PlVector &v)
+  {
+   PlVec06(v);
+   v.name="xauusd_tick_value_off_unexplained";
+   v.what="XAUUSD tick value 0.02, OrderCalcProfit 480, move x contract 500: unexplained, BLOCK PL_R_PATHS_DISAGREE";
+   v.s.tick_value_loss=0.02;
+   v.s.tick_value_profit=0.02;
+   v.in.calcprofit_loss_1lot=480.0;
+   v.exp_lpl_a=10.0;
+   v.exp_lpl_price=480.0;
+   v.exp_loss_per_lot=480.0;
+   v.exp_spread_money=EMPTY_VALUE;
+   v.exp_lot=EMPTY_VALUE; v.exp_risk_money=EMPTY_VALUE; v.exp_risk_percent=EMPTY_VALUE; v.exp_margin_needed=EMPTY_VALUE;
+   v.exp_verdict=PL_BLOCK;
+   v.exp_reason=PL_R_PATHS_DISAGREE;
+  }
+
+int PlVectorCount() { return(161); }
 
 bool PlVectorGet(const int i, PlVector &v)
   {
@@ -7205,6 +7285,9 @@ bool PlVectorGet(const int i, PlVector &v)
       case 155: PlVec162(v); return(true);
       case 156: PlVec163(v); return(true);
       case 157: PlVec164(v); return(true);
+      case 158: PlVec165(v); return(true);
+      case 159: PlVec166(v); return(true);
+      case 160: PlVec167(v); return(true);
      }
    return(false);
   }

@@ -372,7 +372,7 @@ string PlReasonShort(const PlReason r)
       case PL_R_LOT_BELOW_MIN:      return "lot below min";
       case PL_R_LOT_ABOVE_MAX:      return "lot above max";
       case PL_R_RISK_ABOVE_CAP:     return "risk cap";
-      case PL_R_PATHS_DISAGREE:     return "loss mismatch";
+      case PL_R_PATHS_DISAGREE:     return "broker data";
       case PL_R_MARGIN:             return "no margin";
       case PL_R_STOPOUT_BEFORE_SL:  return "stop-out";
       case PL_R_NO_SL:              return "no SL";
@@ -653,7 +653,7 @@ string PlReasonStatusShort(const PlReason r)
       case PL_R_ENTRY_WRONG_SIDE:   return "Entry on the wrong side";
       case PL_R_LIMIT_WRONG_SIDE:   return "Limit on the wrong side";
       case PL_R_KIND_NOT_ALLOWED:   return "Order type not allowed";
-      case PL_R_PATHS_DISAGREE:     return "Loss figures disagree";
+      case PL_R_PATHS_DISAGREE:     return "Broker data conflict, not trading";
       case PL_R_STOPOUT_BEFORE_SL:  return "Stop-out before the SL";
       case PL_R_CROSS_RATE_AT_SL:   return "Cross pair: rate at SL";
       case PL_R_TRADE_DISABLED:     return "Trading disabled here";

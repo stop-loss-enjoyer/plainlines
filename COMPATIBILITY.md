@@ -1,6 +1,6 @@
 # Compatibility
 
-State as of October 2026 (written on 15 October 2026, updated on 17 October 2026), for version 0.9.3 (shown as 0.93 in the terminal; the checks below name the version they were made with). Terminal builds change. This page is a record of what was checked on that date, not a promise. The checks of 0.9.0 below were done on demo accounts or by reading data without trading. Plainlines is also used by the author in live trading on a real broker account (Bybit) and a real prop firm account (FTMO).
+State as of October 2026 (written on 15 October 2026, updated on 19 October 2026), for version 0.9.4 (shown as 0.94 in the terminal; the checks below name the version they were made with). Terminal builds change. This page is a record of what was checked on that date, not a promise. The checks of 0.9.0 below were done on demo accounts or by reading data without trading. Plainlines is also used by the author in live trading on a real broker account (Bybit) and a real prop firm account (FTMO).
 
 ## Terminal and platform
 
@@ -31,6 +31,8 @@ The symbol test runs the calculation on recorded parameters of every symbol of a
 
 **Bybit.** The probe read 599 symbols in a live Bybit terminal. The account currency there is UST, not USD. Plainlines does not treat that as a known currency name: it learns the conversion from the tick value. 33 symbols were tradable and had quotes: 30 in the mode FOREX_NO_LEVERAGE and 3 in the mode CFD (copper, gold, oil). These 33 got the full calculation test. 22 symbols are disabled for trading and were skipped. The other tradable symbols had no quote in Market Watch at that time, so for them only the lot grid and the refusal without a quote were tested. Not checked on Bybit with 0.9.0: any order, the commission as a trade (the Bybit rules were read on 14 October 2026: 103 symbols with a plain rule in UST and 474 shares with a tier in USD, 0.02 per lot with a minimum of 0.20, which Plainlines accepts by converting USD through the tick value of the symbol; no order was sent with them), the stop levels in a live trade.
 
+**A tick value that is not the money of one lot.** Some servers publish a tick value that their own profit formula does not use. On a FundingPips account (screenshots of a user, 19 October 2026) XAUUSD showed a tick price of 0.01 at a tick size of 0.01 and a contract of 100 (one tick of one lot is 1.00), and XAGUSD 0.5 at 0.001 and 5000 (5.00). Before 0.9.4 Plainlines blocked these symbols with "Loss figures disagree". Now it checks a third way, the price move times the contract: when that agrees with OrderCalcProfit, the money the account is booked with, the tick value is taken as wrong and the lot, reward, spread and swap are counted from OrderCalcProfit. Any other disagreement still blocks the trade, with "Broker data conflict, not trading". This was checked with test vectors made from those numbers, not on a FundingPips account.
+
 **Not covered by any test.** The modes CFDINDEX, EXCH_STOCKS, the futures modes (EXCH_FUTURES, FUTURES, FORTS) and the other exchange modes. Symbols of the bond and collateral types are refused on purpose. Accounts with an account currency other than USD and UST were not tested, and neither was a cent account.
 
 ## Comparison with Position Sizer
@@ -49,7 +51,7 @@ Differences from Position Sizer, on purpose:
 
 1. **Minimum lot.** Position Sizer raises the lot to the broker minimum without asking. Plainlines never raises it silently. With an SL it shows the real risk at the minimum lot and asks for a confirmation, also when Confirmation is off. It blocks when that risk is above the hard cap, and always when there is no SL. In the comparison (XAUUSD Buy Limit, target 0.005 percent) Position Sizer set 0.01 lot with a risk of 18.00 and Plainlines did not send it without a decision.
 2. **No rate of 1.** When the terminal cannot give the loss at the SL, Plainlines blocks. Position Sizer calculates with a rate of 1. This case was not run, because the demo server has every rate.
-3. **Loss per lot.** Plainlines takes the loss from OrderCalcProfit and checks it against the tick value, and it uses the larger one. Position Sizer uses the tick value. This is the one-cent difference on the USDJPY Buy Stop.
+3. **Loss per lot.** Plainlines takes the loss from OrderCalcProfit and checks it against the tick value (and, when they disagree, against the price move times the contract, see Symbol tests above). Position Sizer uses the tick value. This is the one-cent difference on the USDJPY Buy Stop.
 4. **Percent commission.** Plainlines takes it from the entry price and from the SL price. Position Sizer takes the same amount for both sides from the ask. This is the difference on BTCUSD.
 5. **Spread in the risk on a market entry.** Plainlines counts a buy from the ask and a sell from the bid, so the spread is in the risk. This was meant as a difference, but Position Sizer starts from the ask and the bid too. The lots matched on XAUUSD and US500.cash.
 

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.9.4 (2026-10-19)
+
+- Gold and silver on servers that publish a wrong tick value now trade. On a FundingPips account XAUUSD showed a tick price of 0.01 for one lot of 100 oz and XAGUSD 0.5 for one lot of 5000 oz, so the panel blocked them with "Loss figures disagree" and showed a reward of a few cents. Now, when the terminal's own profit calculation agrees with the price move times the contract, the lot, reward, spread, swap and the BE button are counted from it. Any other disagreement still blocks, with a clearer phrase: "Broker data conflict, not trading".
+- The plan lines no longer get in the way of open orders. When a line of the plan lies on a line of a live order or position, the line under the pointer is the plan line: dragging it moves the plan and never the real order. Order lines anywhere else on the chart drag as before. A pending plan the panel places itself (after a trade, on the Limit or Stop button) also keeps clear of the levels of live orders, so after placing a Limit the eye no longer brings the plan back on top of it.
+- Removing Plainlines from the chart always removes its lines. Before, about one removal in ten left the Entry, SL and TP lines on the chart.
+- Placing a pending order plays the same soft click as opening a trade.
+
 ## 0.9.3 (2026-10-17)
 
 - New option in Advanced, Click to place (off by default). With it on, the Market and Limit buttons (in the strip, the card and the full panel) start placing the lines with the pointer: the SL line follows the cursor, a left click fixes it, then TP1 follows (its label shows the live R) and a click fixes it. Limit starts with the Entry line, then the SL, then TP1, and the order type still changes between Limit and Stop as it does when you drag the Entry. The last click only places TP1, it never sends an order: the trade button and Shift+T stay the only way to send. Esc, a right click, the same button again, the other type button, the menu, the trade button, Shift+T, a symbol or timeframe change and switching the option off cancel it and the lines go back to where they were (the trade button and Shift+T cancel without sending). If the lines are hidden, pressing the button shows them first. With the option off nothing changes: Market and Limit only switch the type.

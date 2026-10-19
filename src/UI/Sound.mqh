@@ -1,7 +1,7 @@
 // Required Notice: Copyright 2026 stop-loss-enjoyer
 // Plainlines is source-available under the PolyForm Shield License 1.0.0.
 //
-// Trade sounds: a short soft sound when a position of Plainlines opens and another one when it
+// Trade sounds: a short soft sound when a position of Plainlines opens or the panel places a pending order, and another one when it
 // closes (by SL, TP, the terminal's own button or the panel), told apart by the sign of the result. The WAV
 // files live in src/Sounds/ and are built into the .ex5 with #resource in the
 // main file, so nothing is read from disk at run time. The sound is one recorded key press of a mechanical
@@ -47,6 +47,16 @@ bool PlSoundClaim(const ulong deal)
    const double old=GlobalVariableGet(k);
    if(old==(double)deal) return false;
    return GlobalVariableSetOnCondition(k,(double)deal,old);
+  }
+
+//--- a pending order placed by the panel (no deal yet): the open sound, as for a fill (19.10.2026: the terminal's own sound alone
+//--- was heard there). A limit that fills later clicks again then, by its deal
+void PlSoundPlaced()
+  {
+   if(!g_cfg.sounds) return;
+   g_snd_last=GetTickCount64();
+   const bool ok=PlaySound(PL_SND_OPEN);
+   PLDBG("SOUND placed played="+(string)ok);
   }
 
 //--- called for every new deal (TRADE_TRANSACTION_DEAL_ADD)

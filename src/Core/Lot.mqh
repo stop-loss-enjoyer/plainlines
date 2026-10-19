@@ -422,9 +422,42 @@ double PlRecStartVol(const bool pos_found,const double pos_vol,const double part
    return (part_lot>0.0)?part_lot:0.0;
   }
 
-void PlCompute(const PlInputs &in,const PlSymbol &s,const PlAccount &a,const PlPlan &plan,PlResult &r)
+//--- the tick value of the broker against the terminal's own loss (OrderCalcProfit, the formula the server books the profit with).
+//--- In the price move modes the profit is move x contract x lots (CFD index: times tick price / tick size): a server may fill the
+//--- published tick value with what its formula does not use. FundingPips 19.10.2026: XAUUSD tick price 0.01 at tick 0.01 and contract 100 (1.00 per lot), XAGUSD 0.5 at tick
+//--- 0.001 and contract 5000 (5.00 per lot). A third path settles it: the move x contract with no conversion. When it agrees with
+//--- OrderCalcProfit and the tick value is the odd one out, the tick values are scaled to the terminal's loss, so the lot, reward,
+//--- spread, swap and the rate k all rest on the money the account is booked with. Any other disagreement (a conversion between the
+//--- currencies, a tick price apart from the tick size) is not explained and PL_R_PATHS_DISAGREE blocks as before. A tick value taken at the SL rate (base =
+//--- account) is not the path there and stays as it is. true: scaled
+bool PlTickValueFix(const PlInputs &in,const PlPlan &plan,const PlAccount &a,PlSymbol &s)
+  {
+   if(in.no_sl || !in.calcprofit_ok || in.calcprofit_loss_1lot<=0.0 || plan.ticks<=0 || s.tick_value_loss<=0.0)
+      return false;
+   if(!PlDeltaMode(s.calc_mode) || s.tick_size<=0.0 || s.contract<=0.0)
+      return false;
+   if(PlCcyRelation(s)==PL_CCY_BASE)
+      return false;
+   const double c=in.calcprofit_loss_1lot;
+   const double la=PlLossA(s,plan.sl,plan.ticks);
+   if(la<=0.0 || PlPathsAgree(la,c,a.currency_digits))
+      return false;
+   const double lb=(double)plan.ticks*s.tick_size*s.contract;
+   if(!PlPathsAgree(lb,c,a.currency_digits))
+      return false;
+   const double f=c/la;
+   if(!MathIsValidNumber(f) || f<=0.0)
+      return false;
+   s.tick_value_loss*=f;
+   s.tick_value_profit*=f;
+   return true;
+  }
+
+void PlCompute(const PlInputs &in,const PlSymbol &s_in,const PlAccount &a,const PlPlan &plan,PlResult &r)
   {
    PlResultInit(r);
+   PlSymbol s=s_in;
+   PlTickValueFix(in,plan,a,s);
    if(!plan.ok)
      {
       r.verdict=PL_BLOCK;

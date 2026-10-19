@@ -444,7 +444,11 @@ double PlBreakevenSl(const string sym,const bool buy,const double open,const dou
    const double tk=PlTickOf(sym);
    const int dg=PlDigitsOf(sym);
    if(tk<=0.0 || vol<=0.0) return 0.0;
-   const double tv=SymbolInfoDouble(sym,SYMBOL_TRADE_TICK_VALUE_PROFIT);
+   //--- money of one tick of one lot by the terminal's own profit (100 ticks, then per tick): a server that publishes the tick value per
+   //--- unit of the contract (XAUUSD on FundingPips, 19.10.2026) would make every step below 100 times too long. The tick value only if
+   //--- that cannot be valued
+   double tv=SymbolInfoDouble(sym,SYMBOL_TRADE_TICK_VALUE_PROFIT), p100=0.0;
+   if(OrderCalcProfit(buy?ORDER_TYPE_BUY:ORDER_TYPE_SELL,sym,1.0,open,buy?open+100.0*tk:open-100.0*tk,p100) && p100>0.0) tv=p100/100.0;
    double ticks=1.0;
    bool known=false;
    const double cpl=PlPosCommPerLot(id,known);
