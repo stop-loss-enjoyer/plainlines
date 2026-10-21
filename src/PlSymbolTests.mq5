@@ -28,6 +28,38 @@
 //--- per set counters
 string g_set="";
 string g_acct_ccy="";
+int    g_set_row=0;         // row index of the current set's "S" row: the forex rate is looked up among that set's symbols
+int    g_tv_fixed=0;        // sides where the broker tick value is wrong and the core explains it (move x contract, at a forex quote)
+string g_tv_fixed_json="";
+
+//--- what PlFxQuoteRate does in the terminal, over the symbols of the current set: account money per unit of cur from a forex
+//--- symbol found by its currency fields, cur/account at the mid or account/cur inverted; 0 when none
+double SetFxRate(const string cur)
+  {
+   if(cur=="" || cur==g_acct_ccy)
+      return 0.0;
+   for(int i=g_set_row+1; i<ArraySize(g_pl_sym_rows); i++)
+     {
+      string f[];
+      const int k=StringSplit(g_pl_sym_rows[i],'|',f);
+      if(k>=1 && f[0]=="S")
+         break;
+      if(k<27)
+         continue;
+      const int m=(int)StringToInteger(f[3]);
+      if(m!=SYMBOL_CALC_MODE_FOREX && m!=SYMBOL_CALC_MODE_FOREX_NO_LEVERAGE)
+         continue;
+      const bool direct=(f[11]==cur && f[12]==g_acct_ccy), inverse=(f[11]==g_acct_ccy && f[12]==cur);
+      if(!direct && !inverse)
+         continue;
+      const double bid=StringToDouble(f[25]), ask=StringToDouble(f[26]);
+      if(bid<=0.0 || ask<bid)
+         continue;
+      const double mid=(bid+ask)/2.0;
+      return direct?mid:1.0/mid;
+     }
+   return 0.0;
+  }
 int    g_acct_digits=2;
 int    g_acct_margin_mode=0;
 string g_fail_json="";
@@ -52,6 +84,7 @@ double g_sellx_max_rel=0.0;
 string g_key_no_conv_json="";
 string g_rejected_json="";
 string g_blocks_json="";
+int    g_known_no_margin=0, g_known_sl_below_zero=0;   // known broker defects accepted as a correct BLOCK (20.10.2026), never as a failure
 int    g_blocks_n=0, g_blocks_shown=0;
 int    g_blocks_by_reason[];
 string g_blocks_reason_name[];
@@ -200,6 +233,7 @@ void InputsBase(PlInputs &in)
    in.atr_mult=0.0;
    in.calcprofit_ok=false;
    in.calcprofit_loss_1lot=0.0;
+   in.calcprofit_vol=1.0;
    in.net_calc_ok=false;
    in.net_loss_new=0.0;
    in.net_loss_old=0.0;
@@ -278,7 +312,7 @@ int CommVolTypeOf(const string nm)
    return -1;
   }
 
-//--- the commission part of a 51-field row as the core's plain data, shaped exactly as Terminal/Market.mqh PlCommRule does it
+//--- the commission part of a 51- or 55-field row as the core's plain data, shaped exactly as Terminal/Market.mqh PlCommRule does it
 //--- (one rule only when n==1; tier fields only when a tier exists). 30, 31..: the fields written by the generator of the file
 void BuildRule(const string &f[],int &n,PlBrokerRule &r[])
   {
@@ -352,8 +386,8 @@ bool PlainRuleByNames(const string &f[],const string acct,const double vol,PlCom
       else
          return false;
      }
-   if(pct && f[34]=="SYMBOL_COMMISSION_ENTRY_INOUT" && mn==0.0)
-      kind=PL_COMM_PERCENT_SIDE;
+   if(pct && ((f[34]=="SYMBOL_COMMISSION_ENTRY_INOUT" && mn==0.0) || f[34]=="SYMBOL_COMMISSION_ENTRY_IN"))
+      kind=PL_COMM_PERCENT_SIDE;      // an entry percent counted per side (BrightFunded crypto, 20.10.2026), the minimum per order
    else if(money && f[34]=="SYMBOL_COMMISSION_ENTRY_INOUT" && mn==0.0)
       kind=PL_COMM_LOT_SIDE;
    else if(money && f[34]=="SYMBOL_COMMISSION_ENTRY_IN")
@@ -413,7 +447,10 @@ void RunSymbol(const string &f[],const int nf)
    // 28 profit_buy, 29 profit_sell; a 51-field row adds the broker rule and the probe-time state:
    // 30 comm_n, 31 rule currency, 32 charge, 33 direction, 34 entry, 35 profit, 36 range, 37 tier count, 38 range_from,
    // 39 range_to, 40 min_value, 41 max_value, 42 value, 43 tier mode, 44 volume type, 45 tier currency,
-   // 46 session_open_now, 47 tick_age_s, 48 ref_ticks, 49 profit_1lot_buy_ref, 50 profit_1lot_sell_ref
+   // 46 session_open_now, 47 tick_age_s, 48 ref_ticks, 49 profit_1lot_buy_ref, 50 profit_1lot_sell_ref; a 55-field row (probe of
+   // 20.10.2026 and later) adds the values through the scaled helpers (a lot worth cents is valued on 10, 100, ... lots and divided back):
+   // 51 profit_ref_vol (the volume the buy ref loss was taken on), 52 profit_1lot_buy_ref_scaled, 53 profit_1lot_sell_ref_scaled,
+   // 54 margin_1lot_buy_scaled; an empty field is a call that failed, the old fields are used then
    g_total++;
    PlSymbol s;
    ZeroMemory(s);
@@ -452,7 +489,9 @@ void RunSymbol(const string &f[],const int nf)
    s.server_now=D'2026.10.13 12:00:00';
    s.session_open=true;
    const bool has_pb=(f[28]!=""), has_ps=(f[29]!=""), has_m=(f[27]!="");
-   const double m1=has_m?StringToDouble(f[27]):0.0;
+   const bool has_scaled=(nf==55);
+   const bool sc_m=(has_scaled && f[54]!="");
+   const double m1=sc_m?StringToDouble(f[54]):(has_m?StringToDouble(f[27]):0.0);
    s.margin_buy_1lot=m1;
    s.margin_sell_1lot=m1;
 
@@ -477,7 +516,7 @@ void RunSymbol(const string &f[],const int nf)
    MakeAccount(a);
 
    //--- the broker's commission rule through the pure PlBrokerCommRule, against an independent reading of the probe's names
-   const bool has_rule=(nf==51);
+   const bool has_rule=(nf>=51);
    PlCommKind rk=PL_COMM_UNKNOWN;
    double rrate=0.0, rmin=0.0;
    bool rzero=false, racc=false;
@@ -536,6 +575,23 @@ void RunSymbol(const string &f[],const int nf)
       PlResult r;
       const bool okp=PlPrepare(in,s,p);
       PlCompute(in,s,a,p,r);
+      //--- known broker defect, only this shape: the row has a quote and the other values, but the buy reference SL (ask minus
+      //--- ref_ticks ticks) is below zero, so the probe's OrderCalcProfit for it failed (FunderPro DOTUSD, quote 0.68/1.68, 400 ticks of
+      //--- 0.01). Any BLOCK is right there: the panel cannot size a lot from a failed reference, it must refuse.
+      const bool sl_below_zero=(has_rule && s.bid>0.0 && s.ask>0.0 && has_pb && has_ps && f[48]!="" && f[49]==""
+                                && (s.ask-StringToDouble(f[48])*s.tick_size)<=0.0);
+      if(sl_below_zero)
+        {
+         const bool okz=(r.verdict==PL_BLOCK);
+         Check(okz,s.name,"","ref_sl_below_zero_blocked","BLOCK (any reason)",EnumToString(r.verdict)+" "+IntegerToString(r.reason));
+         if(okz)
+           {
+            g_unquoted_ok++;
+            g_known_sl_below_zero++;
+            NoteBlock("known_ref_sl_below_zero",s,r.reason,"buy reference SL (ask minus "+f[48]+" ticks) is below zero, the broker's OrderCalcProfit failed for it; any BLOCK is correct",true,has_rule&&f[46]=="1",f[47]);
+           }
+         return;
+        }
       const bool ok=(!okp && !p.ok && r.verdict==PL_BLOCK && r.reason==PL_R_NO_QUOTE);
       Check(ok,s.name,"","unquoted_refused","BLOCK NO_QUOTE",EnumToString(r.verdict)+" "+IntegerToString(r.reason));
       if(ok)
@@ -564,6 +620,20 @@ void RunSymbol(const string &f[],const int nf)
       const double sl=(side==0)?sl_buy:sl_sell;
       const double c=(side==0)?c_buy:c_sell;
       const double av=PlLossA(s,sl,100);
+      //--- a broker tick value the core corrects (PlTickValueFix): the move x contract, in the profit currency or at the forex quote
+      //--- of the set, agrees with OrderCalcProfit while the tick value does not. Prop servers 19.10.2026 (U30USD, VIX.x, XPTUSD,
+      //--- EUR/GBP/JPY/AUD/HKD indices). Counted and listed as a broker data defect, not as a failure; run C still runs the core.
+      if(!PlPathsAgree(av,c,g_acct_digits) && rel!=PL_CCY_BASE)
+        {
+         const double lb=100.0*s.tick_size*s.contract, fx=SetFxRate(s.profit);
+         if(PlPathsAgree(lb,c,g_acct_digits) || (fx>0.0 && PlPathsAgree(lb*fx,c,g_acct_digits)))
+           {
+            g_tv_fixed++;
+            if(side==0)
+               g_tv_fixed_json+=(g_tv_fixed_json==""?"":",")+"\""+JsonStr(s.name)+"\"";
+            continue;
+           }
+        }
       g_path_checks++;
       const double dif=MathAbs(av-c);
       const double rl=dif/MathMax(av,c);
@@ -617,6 +687,7 @@ void RunSymbol(const string &f[],const int nf)
       return;
      }
    double cc;
+   double ccv=1.0;                    // the volume cc was taken on (PlInputs.calcprofit_vol)
    if(has_rule)
      {
       //--- the loss measured by OrderCalcProfit AT this SL distance (the probe used the same formula for the distance):
@@ -624,6 +695,12 @@ void RunSymbol(const string &f[],const int nf)
       Check(MathAbs(dd-StringToDouble(f[48]))<1e-9,s.name,"buy","ref_ticks_formula",Dbl(dd),f[48]);
       dd=StringToDouble(f[48]);
       cc=-StringToDouble(f[49]);
+      if(has_scaled && f[52]!="")
+        {
+         cc=-StringToDouble(f[52]);
+         ccv=StringToDouble(f[51]);
+         Check(ccv>=1.0,s.name,"buy","scaled_vol_sane",">=1",f[51]);
+        }
      }
    else if(rel==PL_CCY_BASE)
       cc=c_buy*sl_buy*dd/(100.0*slc);
@@ -638,18 +715,36 @@ void RunSymbol(const string &f[],const int nf)
    in2.cap_percent=100.0;
    in2.confirm_above=100.0;
    in2.calcprofit_ok=true;
+   in2.fx_rate=SetFxRate(s.profit);
    in2.calcprofit_loss_1lot=cc;
+   in2.calcprofit_vol=ccv;
    PlPlan p2;
    PlResult r2;
    const bool okp2=PlPrepare(in2,s,p2);
    PlCompute(in2,s,a,p2,r2);
    const bool margin_pred=(want_lot*m1>a.margin_free+PL_EPS);
    const bool cap_pred=(in2.risk_money>a.balance);
+   //--- known broker defect: the scaled margin probe gave 0 (at 1 lot and at every volume up to 1e8; FunderPro XPTUSD, margin currency
+   //--- XPT). The only correct answer is BLOCK PL_R_NO_MARGIN; anything else (an allowed lot on a margin of 0) is a failure.
+   const bool no_margin_known=(has_scaled && sc_m && m1<=0.0);
    bool ok=okp2 && p2.ok;
    string why="";
    if(!ok)
       why="prepare reason "+IntegerToString(p2.reason);
-   if(ok && r2.verdict==PL_BLOCK)
+   if(ok && no_margin_known)
+     {
+      if(r2.verdict==PL_BLOCK && r2.reason==PL_R_NO_MARGIN)
+        {
+         g_known_no_margin++;
+         NoteBlock("known_no_margin",s,r2.reason,"the terminal gives margin 0 for 1 lot and at every volume up to 1e8 (margin currency "+s.margin+"); BLOCK is correct",has_rule,true,"0");
+        }
+      else
+        {
+         ok=false;
+         why="margin 0 in the probe, want BLOCK NO_MARGIN, got "+EnumToString(r2.verdict)+" "+EnumToString(r2.reason);
+        }
+     }
+   else if(ok && r2.verdict==PL_BLOCK)
      {
       const bool expl=((margin_pred && r2.reason==PL_R_MARGIN) || (cap_pred && r2.reason==PL_R_RISK_ABOVE_CAP)
                        || (margin_pred && cap_pred));
@@ -725,7 +820,9 @@ void RunSymbol(const string &f[],const int nf)
       in3.cap_percent=100.0;
       in3.confirm_above=100.0;
       in3.calcprofit_ok=true;
+      in3.fx_rate=SetFxRate(s.profit);
       in3.calcprofit_loss_1lot=cc;
+      in3.calcprofit_vol=ccv;
       in3.comm.kind=rk;
       in3.comm.rate=rrate;
       in3.comm.min_money=rmin;
@@ -856,7 +953,7 @@ void RunSymbol(const string &f[],const int nf)
      }
 
    //--- final margin negatives, once per set, on the first quoted symbol (copies of its run C result)
-   if(!g_final_tested && okp2 && p2.ok && r2.lot>PL_EPS)
+   if(!g_final_tested && okp2 && p2.ok && r2.lot>PL_EPS && !no_margin_known)
      {
       g_final_tested=true;
       int good=0;
@@ -884,7 +981,7 @@ void ResetSet()
   {
    g_fail_json=""; g_fail_count=0; g_checks=0;
    g_total=0; g_disabled=0; g_tradable=0; g_grid_ok=0; g_unquoted=0; g_unquoted_ok=0; g_quoted=0;
-   g_path_checks=0; g_path_tight_ok=0; g_path_core_ok=0;
+   g_path_checks=0; g_path_tight_ok=0; g_path_core_ok=0; g_tv_fixed=0; g_tv_fixed_json="";
    g_max_abs=0.0; g_max_rel=0.0; g_max_abs_sym=""; g_max_abs_side=""; g_max_rel_sym="";
    g_runc_ok=0; g_runc_expected_block=0; g_final_done=0; g_final_ok=0;
    g_rel_profit=0; g_rel_base=0; g_rel_cross=0; g_rel_na=0;
@@ -892,7 +989,7 @@ void ResetSet()
    g_rule_min=0; g_rule_rows=0; g_rule_accepted=0; g_rule_rejected=0; g_rule_zero=0; g_rule_percent=0; g_rule_lot_side=0; g_rule_lot_round=0;
    g_runb_ok=0; g_runb_block_expl=0; g_runp_ok=0; g_runp_closed=0; g_runp_stale=0; g_runp_fresh=0;
    g_sellx_n=0; g_sellx_a_lt_c=0; g_sellx_max_rel=0.0;
-   g_key_no_conv=0; g_key_no_conv_json=""; g_rejected_json=""; g_blocks_json=""; g_blocks_n=0; g_blocks_shown=0;
+   g_key_no_conv=0; g_key_no_conv_json=""; g_rejected_json=""; g_known_no_margin=0; g_known_sl_below_zero=0; g_blocks_json=""; g_blocks_n=0; g_blocks_shown=0;
    ArrayResize(g_blocks_by_reason,0); ArrayResize(g_blocks_reason_name,0); ArrayResize(g_blocks_by_reason_run,0);
   }
 
@@ -916,6 +1013,7 @@ void FlushSet()
           +",\"unquoted_refused_ok\":"+IntegerToString(g_unquoted_ok)+",\"quoted\":"+IntegerToString(g_quoted)
           +",\"path_checks\":"+IntegerToString(g_path_checks)+",\"path_tight_ok\":"+IntegerToString(g_path_tight_ok)
           +",\"path_core_ok\":"+IntegerToString(g_path_core_ok)
+          +",\"tick_value_fixed_sides\":"+IntegerToString(g_tv_fixed)+",\"tick_value_fixed_symbols\":["+g_tv_fixed_json+"]"
           +",\"sell_cross_wider_than_half_unit\":"+IntegerToString(g_sellx_n)+",\"sell_cross_max_rel\":"+Dbl(g_sellx_max_rel)
           +",\"sell_cross_a_below_c\":"+IntegerToString(g_sellx_a_lt_c)
           +",\"max_abs_diff\":"+Dbl(g_max_abs)+",\"max_abs_symbol\":\""+JsonStr(g_max_abs_sym)+"\",\"max_abs_side\":\""+g_max_abs_side+"\""
@@ -932,6 +1030,8 @@ void FlushSet()
           +",\"probe_time_ok\":"+IntegerToString(g_runp_ok)+",\"probe_time_market_closed\":"+IntegerToString(g_runp_closed)
           +",\"probe_time_stale_quote\":"+IntegerToString(g_runp_stale)+",\"probe_time_same_as_fresh\":"+IntegerToString(g_runp_fresh)
           +",\"key_check_percent_no_conversion\":{\"count\":"+IntegerToString(g_key_no_conv)+",\"symbols\":["+g_key_no_conv_json+"]}}"
+          +",\"known_blocks\":{\"no_margin_probe_zero\":"+IntegerToString(g_known_no_margin)+",\"ref_sl_below_zero\":"+IntegerToString(g_known_sl_below_zero)
+          +",\"why\":\"counted as correct blocks, not failures: margin 0 at every volume (BLOCK NO_MARGIN); buy reference SL below zero, OrderCalcProfit failed (any BLOCK)\"}"
           +",\"blocks_total\":"+IntegerToString(g_blocks_n)+",\"blocks_by_run_and_reason\":"+BlocksSummary()
           +",\"blocks\":[\n"+g_blocks_json+"\n]"
           +",\"checks\":"+IntegerToString(g_checks)+",\"failure_count\":"+IntegerToString(g_fail_count)
@@ -953,6 +1053,7 @@ void OnStart()
          FlushSet();
          ResetSet();
          g_set=f[1];
+         g_set_row=i;
          g_acct_ccy=f[2];
          g_acct_digits=(int)StringToInteger(f[3]);
          g_acct_margin_mode=MarginModeOf(f[4]);
@@ -960,10 +1061,10 @@ void OnStart()
             Fail("","","margin_mode_name","known",f[4]);
          Check(g_acct_margin_mode==ACCOUNT_MARGIN_MODE_RETAIL_HEDGING,"","","margin_mode_hedging","RETAIL_HEDGING",f[4]);
         }
-      else if((k==30 || k==51) && f[0]=="Y")
+      else if((k==30 || k==51 || k==55) && f[0]=="Y")
          RunSymbol(f,k);
       else
-         Fail("","","row_format","30 or 51 fields",IntegerToString(k)+" fields in row "+IntegerToString(i));
+         Fail("","","row_format","30, 51 or 55 fields",IntegerToString(k)+" fields in row "+IntegerToString(i));
      }
    FlushSet();
    string gj="";

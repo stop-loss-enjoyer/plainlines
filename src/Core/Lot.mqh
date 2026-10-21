@@ -127,10 +127,11 @@ double PlLossA(const PlSymbol &s,const double sl,const long ticks)
    return (double)ticks*s.tick_value_loss;
   }
 
-//--- (a) and (c) agree: share tolerance plus half a unit of the account currency (OrderCalcProfit rounds to it)
-bool PlPathsAgree(const double a,const double c,const int digits)
+//--- (a) and (c) agree: share tolerance plus half a unit of the account currency (OrderCalcProfit rounds to it). c taken on vol
+//--- lots and divided back (PlCalcProfitPerLot) carries that half unit divided by vol
+bool PlPathsAgree(const double a,const double c,const int digits,const double vol=1.0)
   {
-   const double half=0.5/PlPow10(digits);
+   const double half=0.5/PlPow10(digits)/((vol>=1.0)?vol:1.0);
    return MathAbs(a-c)<=PL_PATH_TOLERANCE*MathMax(a,c)+half+PL_EPS;
   }
 
@@ -218,8 +219,10 @@ void PlApplyFinalMargin(PlResult &r,const PlAccount &a,const bool ok,const doubl
    PlVerdictAcc acc;
    acc.verdict=r.verdict;
    acc.reason=r.reason;
-   if(!ok || m_lot<=0.0)
+   if(!ok)
       PlAccAdd(acc,PL_BLOCK,PL_R_NO_SYMBOL_DATA);
+   else if(m_lot<=0.0)
+      PlAccAdd(acc,PL_BLOCK,PL_R_NO_MARGIN);      // answered, but 0: the broker gives no margin for this symbol
    else
      {
       r.margin_needed=MathMax(r.margin_needed,m_lot);
@@ -279,8 +282,10 @@ struct PlBrokerRule
 //---   PERCENT + INOUT -> PL_COMM_PERCENT_SIDE;  MONEY_* + INOUT -> PL_COMM_LOT_SIDE;
 //---   MONEY_* + IN -> PL_COMM_LOT_ROUND: Lot.mqh splits a round in half in and out, so the round total is right and the
 //---   exit cost of an already open position is overestimated, the safe side.
-//--- A minimum (min_value > 0) is accepted only for MONEY_* + IN: it is the money one order pays once for the round
-//--- (min_round, account money). With INOUT or PERCENT the minimum would be per deal and per side with a price-dependent rate:
+//---   PERCENT + IN -> PL_COMM_PERCENT_SIDE (BrightFunded crypto 0.024% at the entry, minimum 0.01, 20.10.2026): the entry percent is
+//---   counted at the entry and again at the exit, so the commission is overestimated by one side, the safe side, with no kind of its own.
+//--- A minimum (min_value > 0) is accepted only for an entry rule (MONEY_* + IN, PERCENT + IN): it is the money one order pays once
+//--- for the round (min_round, account money). With INOUT the minimum would be per deal and per side with a price-dependent rate:
 //--- not known to hold, refused.
 //--- known_zero: the rule says 0 (US500.cash): kind LOT_SIDE with rate 0, counted as zero with no "not counted" note.
 //--- A zero rate with a minimum is not a zero: LOT_ROUND with rate 0 and the minimum, known_zero false.
@@ -316,15 +321,22 @@ bool PlBrokerCommRule(const int n,const PlBrokerRule &r[],const string account_c
       if(!PlCcyRate(r[0].tier_currency,s,k_ok,k,cf) || !(cf>0.0))
          return false;
      }
-   if(m==SYMBOL_COMMISSION_PERCENT && e==SYMBOL_COMMISSION_ENTRY_INOUT)
+   bool entry_rule=false;
+   if(m==SYMBOL_COMMISSION_PERCENT && (e==SYMBOL_COMMISSION_ENTRY_INOUT || e==SYMBOL_COMMISSION_ENTRY_IN))
+     {
       kind=PL_COMM_PERCENT_SIDE;
+      entry_rule=(e==SYMBOL_COMMISSION_ENTRY_IN);
+     }
    else if((m==SYMBOL_COMMISSION_MONEY_SPECIFIED || m==SYMBOL_COMMISSION_MONEY_DEPOSIT) && e==SYMBOL_COMMISSION_ENTRY_INOUT)
       kind=PL_COMM_LOT_SIDE;
    else if((m==SYMBOL_COMMISSION_MONEY_SPECIFIED || m==SYMBOL_COMMISSION_MONEY_DEPOSIT) && e==SYMBOL_COMMISSION_ENTRY_IN)
+     {
       kind=PL_COMM_LOT_ROUND;
+      entry_rule=true;
+     }
    else
       return false;
-   if(r[0].min_value>0.0 && kind!=PL_COMM_LOT_ROUND)
+   if(r[0].min_value>0.0 && !entry_rule)
      {
       kind=PL_COMM_UNKNOWN;
       return false;
@@ -427,8 +439,8 @@ double PlRecStartVol(const bool pos_found,const double pos_vol,const double part
 //--- published tick value with what its formula does not use. FundingPips 19.10.2026: XAUUSD tick price 0.01 at tick 0.01 and contract 100 (1.00 per lot), XAGUSD 0.5 at tick
 //--- 0.001 and contract 5000 (5.00 per lot). A third path settles it: the move x contract with no conversion. When it agrees with
 //--- OrderCalcProfit and the tick value is the odd one out, the tick values are scaled to the terminal's loss, so the lot, reward,
-//--- spread, swap and the rate k all rest on the money the account is booked with. Any other disagreement (a conversion between the
-//--- currencies, a tick price apart from the tick size) is not explained and PL_R_PATHS_DISAGREE blocks as before. A tick value taken at the SL rate (base =
+//--- spread, swap and the rate k all rest on the money the account is booked with. Any other disagreement (a conversion with no
+//--- forex quote to check it, a tick price apart from the tick size) is not explained and PL_R_PATHS_DISAGREE blocks as before. A tick value taken at the SL rate (base =
 //--- account) is not the path there and stays as it is. true: scaled
 bool PlTickValueFix(const PlInputs &in,const PlPlan &plan,const PlAccount &a,PlSymbol &s)
   {
@@ -439,12 +451,22 @@ bool PlTickValueFix(const PlInputs &in,const PlPlan &plan,const PlAccount &a,PlS
    if(PlCcyRelation(s)==PL_CCY_BASE)
       return false;
    const double c=in.calcprofit_loss_1lot;
+   const double cv=in.calcprofit_vol;
    const double la=PlLossA(s,plan.sl,plan.ticks);
-   if(la<=0.0 || PlPathsAgree(la,c,a.currency_digits))
+   if(la<=0.0 || PlPathsAgree(la,c,a.currency_digits,cv))
       return false;
-   const double lb=(double)plan.ticks*s.tick_size*s.contract;
-   if(!PlPathsAgree(lb,c,a.currency_digits))
-      return false;
+   //--- the move x contract in the profit currency; in another currency it is taken at the rate of an independent forex quote
+   //--- (in.fx_rate): servers 19.10.2026 leave the tick value of EUR, GBP, JPY, AUD and HKD indices unconverted (For Traders,
+   //--- Hola Prime, Maven, Audacity, BrightFunded), OrderCalcProfit converts. No quote, no explanation: the block stays.
+   double lb=(double)plan.ticks*s.tick_size*s.contract;
+   if(!PlPathsAgree(lb,c,a.currency_digits,cv))
+     {
+      if(in.fx_rate<=0.0)
+         return false;
+      lb*=in.fx_rate;
+      if(!PlPathsAgree(lb,c,a.currency_digits,cv))
+         return false;
+     }
    const double f=c/la;
    if(!MathIsValidNumber(f) || f<=0.0)
       return false;
@@ -530,7 +552,7 @@ void PlCompute(const PlInputs &in,const PlSymbol &s_in,const PlAccount &a,const 
       r.lpl_price=MathMax(r.lpl_a,r.lpl_c);
       if(!have_c)
          PlAccAdd(acc,PL_BLOCK,PL_R_NO_CALC);
-      else if(!PlPathsAgree(r.lpl_a,r.lpl_c,a.currency_digits))
+      else if(!PlPathsAgree(r.lpl_a,r.lpl_c,a.currency_digits,in.calcprofit_vol))
          PlAccAdd(acc,PL_BLOCK,PL_R_PATHS_DISAGREE);
      }
 
@@ -763,7 +785,7 @@ void PlCompute(const PlInputs &in,const PlSymbol &s_in,const PlAccount &a,const 
         }
      }
    else if(lot>PL_EPS)
-      PlAccAdd(acc,PL_BLOCK,PL_R_NO_SYMBOL_DATA);   // the terminal gave no margin: nothing to check against
+      PlAccAdd(acc,PL_BLOCK,(m1<0.0)?PL_R_NO_SYMBOL_DATA:PL_R_NO_MARGIN);   // no answer (often passing: no quote yet), or an answer of 0 also on 1e8 lots: nothing to check against
 
    //--- session and freshness (the send step acts on it; here only the verdict)
    if(!s.session_open)

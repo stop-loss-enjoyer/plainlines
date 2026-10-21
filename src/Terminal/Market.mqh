@@ -109,6 +109,56 @@ void PlReadNetting(const string sym,PlSymbol &s,const bool force=false)
      }
   }
 
+//--- OrderCalcProfit and OrderCalcMargin answer in the account currency rounded to its digits. One lot of a coin under a dollar with
+//--- contract 1 (BrightFunded XRP/USD, GRT/USD, VET/USD, Audacity DOGEUSD, 19.10.2026) is worth cents: its loss to the SL and its margin
+//--- round to 0.00 or 0.01 (the lot came out 300 where 400 was right, or the panel blocked). Under 100 units of the account currency
+//--- (1.00 on a 2-digit account) the call is repeated on 10, 100, ... lots and divided back, so the rounding stays under 0.5% of the
+//--- value; a power of ten divides exactly. A symbol worth 1.00 a lot or more never enters the loop. A larger volume the terminal
+//--- refuses, an answer smaller than the last one or the same nonzero answer on ten times the lots (not linear) ends the loop with the
+//--- last good answer; zero on more lots goes on. false: no answer at 1 lot.
+#define PL_CALC_MIN_UNITS 100.0
+#define PL_CALC_MAX_POW   8
+double PlCalcFloorMoney()
+  {
+   return PL_CALC_MIN_UNITS/PlPow10((int)AccountInfoInteger(ACCOUNT_CURRENCY_DIGITS));
+  }
+
+bool PlCalcProfitPerLot(const ENUM_ORDER_TYPE t,const string sym,const double from,const double to,double &per_lot,double &vol)
+  {
+   per_lot=0.0; vol=1.0;
+   double pr=0.0;
+   if(!OrderCalcProfit(t,sym,1.0,from,to,pr)) return false;
+   per_lot=pr;
+   const double fl=PlCalcFloorMoney();
+   double v=1.0;
+   for(int i=1; i<=PL_CALC_MAX_POW && MathAbs(pr)<fl; i++)
+     {
+      v*=10.0;
+      double pv=0.0;
+      if(!OrderCalcProfit(t,sym,v,from,to,pv) || pv*pr<0.0 || MathAbs(pv)<MathAbs(pr) || (pv==pr && pr!=0.0)) break;
+      pr=pv; per_lot=pv/v; vol=v;
+     }
+   return true;
+  }
+
+bool PlCalcMarginPerLot(const ENUM_ORDER_TYPE t,const string sym,const double price,double &per_lot)
+  {
+   per_lot=0.0;
+   double m=0.0;
+   if(!OrderCalcMargin(t,sym,1.0,price,m)) return false;
+   per_lot=m;
+   const double fl=PlCalcFloorMoney();
+   double v=1.0;
+   for(int i=1; i<=PL_CALC_MAX_POW && m<fl; i++)
+     {
+      v*=10.0;
+      double mv=0.0;
+      if(!OrderCalcMargin(t,sym,v,price,mv) || mv<m || (mv==m && m>0.0)) break;
+      m=mv; per_lot=mv/v;
+     }
+   return true;
+  }
+
 bool PlReadSymbol(const string sym,PlSymbol &s)
   {
    SymbolSelect(sym,true);
@@ -142,10 +192,10 @@ bool PlReadSymbol(const string sym,PlSymbol &s)
    s.swap_3day=(int)SymbolInfoInteger(sym,SYMBOL_SWAP_ROLLOVER3DAYS);
    PlRefreshQuote(s);
    //--- margin for one lot at the current price
-   s.margin_buy_1lot=0.0; s.margin_sell_1lot=0.0;
+   s.margin_buy_1lot=-1.0; s.margin_sell_1lot=-1.0;          // -1: no answer, 0: the terminal answered 0
    double m=0.0;
-   if(s.ask>0.0 && OrderCalcMargin(ORDER_TYPE_BUY,sym,1.0,s.ask,m)) s.margin_buy_1lot=m;
-   if(s.bid>0.0 && OrderCalcMargin(ORDER_TYPE_SELL,sym,1.0,s.bid,m)) s.margin_sell_1lot=m;
+   if(s.ask>0.0 && PlCalcMarginPerLot(ORDER_TYPE_BUY,sym,s.ask,m)) s.margin_buy_1lot=m;
+   if(s.bid>0.0 && PlCalcMarginPerLot(ORDER_TYPE_SELL,sym,s.bid,m)) s.margin_sell_1lot=m;
    PlReadNetting(sym,s);
    return (s.tick_size>0.0 && s.point>0.0);
   }
@@ -183,21 +233,78 @@ void PlReadAccount(PlAccount &a,const bool with_risk=true)
 bool   g_net_gain_ok=false;
 double g_net_gain=0.0;
 
-//--- OrderCalcProfit for 1 lot from the execution price to the SL (positive money) and OrderCalcMargin for 1 lot at the order price
+//--- account money per unit of currency cur from one forex symbol found by its currency fields (never by name, so a suffix
+//--- does not matter): cur/account at the mid, or account/cur inverted. 0: not such a pair or no quote.
+double PlFxPairRate(const string nm,const string cur,const string acc)
+  {
+   const int m=(int)SymbolInfoInteger(nm,SYMBOL_TRADE_CALC_MODE);
+   if(m!=SYMBOL_CALC_MODE_FOREX && m!=SYMBOL_CALC_MODE_FOREX_NO_LEVERAGE)
+      return 0.0;
+   const string b=SymbolInfoString(nm,SYMBOL_CURRENCY_BASE), q=SymbolInfoString(nm,SYMBOL_CURRENCY_PROFIT);
+   const bool direct=(b==cur && q==acc), inverse=(b==acc && q==cur);
+   if(!direct && !inverse)
+      return 0.0;
+   const double bid=SymbolInfoDouble(nm,SYMBOL_BID), ask=SymbolInfoDouble(nm,SYMBOL_ASK);
+   if(bid<=0.0 || ask<bid)
+      return 0.0;
+   const double mid=(bid+ask)/2.0;
+   return direct?mid:1.0/mid;
+  }
+
+//--- the rate of a forex pair between cur and the account currency, 0: same string or the terminal has none. Market Watch first (its quotes
+//--- are live), then every symbol of the server. The count runs on every tick of an index whose tick value disagrees, so a search
+//--- that found nothing is not repeated for 10 s (a server with no USDHKD would scan all its symbols on each tick); the last pair
+//--- found is tried first. Memory only, and only the name: the rate is always read anew
+string g_fx_key="", g_fx_sym="";      // the key is the two currencies: another account currency searches anew
+ulong  g_fx_miss_at=0;
+double PlFxQuoteRate(const string cur)
+  {
+   const string acc=AccountInfoString(ACCOUNT_CURRENCY);
+   if(cur=="" || acc=="" || cur==acc)
+      return 0.0;
+   const string key=cur+"/"+acc;
+   if(key==g_fx_key)
+     {
+      if(g_fx_sym!="") { const double r=PlFxPairRate(g_fx_sym,cur,acc); if(r>0.0) return r; }
+      else if(GetTickCount64()-g_fx_miss_at<10000) return 0.0;
+     }
+   g_fx_key=key; g_fx_sym=""; g_fx_miss_at=GetTickCount64();
+   for(int pass=0;pass<2;pass++)
+     {
+      const bool mw=(pass==0);
+      const int n=SymbolsTotal(mw);
+      for(int i=0;i<n;i++)
+        {
+         const string nm=SymbolName(i,mw);
+         const double r=PlFxPairRate(nm,cur,acc);
+         if(r>0.0) { g_fx_sym=nm; return r; }
+        }
+     }
+   return 0.0;
+  }
+
+
+//--- OrderCalcProfit for 1 lot from the execution price to the SL (positive money) and OrderCalcMargin for 1 lot at the order price,
+//--- both per lot through PlCalc*PerLot (a lot worth cents is valued on more lots).
+//--- The forex rate is looked up only when the tick value disagrees with OrderCalcProfit (the core needs it only then).
 void PlFillTerminalCalcs(PlSymbol &s,const PlPlan &p,PlInputs &in)
   {
-   in.calcprofit_ok=false; in.calcprofit_loss_1lot=0.0;
+   in.calcprofit_ok=false; in.calcprofit_loss_1lot=0.0; in.calcprofit_vol=1.0; in.fx_rate=0.0;
    in.net_calc_ok=false; in.net_loss_new=0.0; in.net_loss_old=0.0;
    g_net_gain_ok=false; g_net_gain=0.0;
    if(!p.ok || p.side==PL_SIDE_NONE || p.exec<=0.0) return;
    const ENUM_ORDER_TYPE t=(p.side==PL_SIDE_BUY)?ORDER_TYPE_BUY:ORDER_TYPE_SELL;
    if(p.sl>0.0)
      {
-      double pr=0.0;
-      if(OrderCalcProfit(t,s.name,1.0,p.exec,p.sl,pr) && pr<0.0)
+      double pr=0.0, pv=1.0;
+      if(PlCalcProfitPerLot(t,s.name,p.exec,p.sl,pr,pv) && pr<0.0)
         {
          in.calcprofit_ok=true;
          in.calcprofit_loss_1lot=-pr;
+         in.calcprofit_vol=pv;
+         //--- a pair whose base is the account currency (USDJPY on USD) is converted at the SL rate by the core and never takes this rate
+         if(p.ticks>0 && PlCcyRelation(s)!=PL_CCY_BASE && !PlPathsAgree((double)p.ticks*s.tick_value_loss,-pr,(int)AccountInfoInteger(ACCOUNT_CURRENCY_DIGITS),pv))
+            in.fx_rate=PlFxQuoteRate(s.profit);
         }
      }
    //--- netting add: the open volume valued from its open price to the new SL and to its own SL. Zero where a move exists is
@@ -230,8 +337,8 @@ void PlFillTerminalCalcs(PlSymbol &s,const PlPlan &p,PlInputs &in)
      }
    //--- margin at the order price; only the plan side is read by the core, both get the same value
    double m=0.0;
-   if(OrderCalcMargin(t,s.name,1.0,p.exec,m) && m>0.0) { s.margin_buy_1lot=m; s.margin_sell_1lot=m; }
-   else { s.margin_buy_1lot=0.0; s.margin_sell_1lot=0.0; }
+   if(PlCalcMarginPerLot(t,s.name,p.exec,m)) { s.margin_buy_1lot=MathMax(m,0.0); s.margin_sell_1lot=s.margin_buy_1lot; }
+   else { s.margin_buy_1lot=-1.0; s.margin_sell_1lot=-1.0; }      // no answer: told apart from an answer of 0 (the core names them differently)
   }
 
 //--- prepare, terminal numbers at the plan price, core, final-volume margin

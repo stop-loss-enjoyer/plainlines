@@ -231,16 +231,22 @@ void PlLinesSync()
 //--- read the lines into g_px; true when any moved
 bool PlLinesPull()
   {
-   bool ch=false;
+   bool ch=false, sl_moved=false;
    double tol=(g_sym.tick_size>0.0)?g_sym.tick_size/4.0:1e-9;
    for(int w=0;w<PL_LN_COUNT;w++)
      {
       if(!PlLineShown(w)) continue;
       if(w==2 && g_cfg.atr_on) continue;      // the ATR stop owns the SL: a dragged SL line is never read
+      if(w>=3 && sl_moved) continue;           // PlSlMovedTo has just set the TPs (mirrored through the entry): their lines still stand at the old prices
       string nm=PlLineName(w);
       if(ObjectFind(0,nm)<0) continue;
       double p=ObjectGetDouble(0,nm,OBJPROP_PRICE);
-      if(p>0.0 && MathAbs(p-PlPxGet(w))>tol) { PlPxSet(w,p); ch=true; g_drag_w=w; }
+      if(p>0.0 && MathAbs(p-PlPxGet(w))>tol)
+        {
+         if(w==2) { PlSlMovedTo(p); sl_moved=true; }
+         else PlPxSet(w,p);
+         ch=true; g_drag_w=w;
+        }
      }
    return ch;
   }

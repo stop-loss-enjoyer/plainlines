@@ -284,7 +284,8 @@ void BrokerBlock()
                                 BrokerCase("max_value",1,r,"USD",0.01,false,PL_COMM_UNKNOWN,0.0,false);
    BrokerBase(r,MS,IN,0.02);    r.max_value=10.0; r.min_value=0.2;
                                 BrokerCase("max_value_with_min_in",1,r,"USD",0.01,false,PL_COMM_UNKNOWN,0.0,false);
-   BrokerBase(r,P,IN,0.0007);   BrokerCase("percent_in",1,r,"USD",0.01,false,PL_COMM_UNKNOWN,0.0,false);
+   //--- 20.10.2026 BrightFunded crypto: PERCENT at the entry only, minimum 0.01 per order: counted per side (the entry twice, safe)
+   BrokerBase(r,P,IN,0.0007);   BrokerCase("percent_in",1,r,"USD",0.01,true,PL_COMM_PERCENT_SIDE,0.0007,false);
    BrokerBase(r,MS,IO,-1.0);    BrokerCase("negative_value",1,r,"USD",0.01,false,PL_COMM_UNKNOWN,0.0,false);
    BrokerBase(r,MS,IN,0.02);    r.min_value=-0.2;
                                 BrokerCase("negative_min",1,r,"USD",0.01,false,PL_COMM_UNKNOWN,0.0,false);
@@ -292,6 +293,14 @@ void BrokerBlock()
                                 BrokerCase("direction_buy",1,r,"USD",0.01,false,PL_COMM_UNKNOWN,0.0,false);
    BrokerBase(r,MS,IO,2.5);     r.currency="";
                                 BrokerCase("empty_currency",1,r,"",0.01,false,PL_COMM_UNKNOWN,0.0,false);
+   {
+    PlSymbol sp;
+    BrokerSym(sp,"BBB","PPP",SYMBOL_CALC_MODE_FOREX,1.0,1.1,1.2);
+    BrokerBase(r,P,IN,0.024);   r.min_value=0.01;
+                                BrokerCaseSym("percent_in_min",1,r,"USD",0.01,sp,true,PL_COMM_PERCENT_SIDE,0.024,0.01,false);
+    BrokerBase(r,P,IN,0.024);   r.min_value=0.01; r.tier_currency="EUR";
+                                BrokerCaseSym("percent_in_min_foreign_tier",1,r,"USD",0.01,sp,false,PL_COMM_UNKNOWN,0.0,0.0,false);
+   }
    //--- 15.10.2026: the minimum (MONEY + ENTRY_IN) and the tier in a currency of the symbol (Bybit shares: rule UST, tier USD, 0.02 and min 0.2)
    PlSymbol s;
    BrokerBase(r,MS,IN,0.02);    r.min_value=0.2;

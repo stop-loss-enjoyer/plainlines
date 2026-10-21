@@ -92,6 +92,7 @@
 #define PLS_SUB_NOT_COUNTED  "not counted"
 #define PLS_SUB_ON           "on"
 #define PLS_SUB_OFF          "off"
+#define PLS_SUB_AT_ONCE      "at once"
 #define PLS_SUB_BE           "BE "
 #define PLS_SUB_TRAIL        "trail"
 #define PLS_SUB_CHANGED      "changed"
@@ -190,7 +191,7 @@ string PlRetcodeText(const uint rc,const int err=0)
       case 10006: return "Rejected by the broker";
       case 10007: return "Cancelled";
       case 10013: return "Invalid request";
-      case 10014: return "Lot not accepted by the broker";
+      case 10014: return "Lot not accepted: the broker may cap lots per order";
       case 10015: return "Price not accepted";
       case 10016: return "SL or TP too close or on the wrong side";
       case 10017: return "Trading is disabled for this symbol";
@@ -402,6 +403,7 @@ string PlReasonShort(const PlReason r)
       case PL_R_SPLIT_TOO_MANY:     return "too many orders";
       case PL_R_SPLIT_NETTING:      return "needs hedging";
       case PL_R_NO_CALC:            return "no loss data";
+      case PL_R_NO_MARGIN:          return "no margin data";
       case PL_R_CALC_MODE:          return "not supported";
       case PL_R_LOT_GRID:           return "lot step";
       case PL_R_NO_FILL_MODE:       return "no fill type";
@@ -560,6 +562,8 @@ string PlGuardPhrase(const PlGuardOut &o,const PlGuardCfg &c,const double new_ri
 #define PLS_MAX_SPREAD_PCT_OF_SL         "Max spread, % of SL"
 #define PLS_CONFIRMATION                 "Confirmation"
 #define PLS_HOTKEY_NOTE                  "Shift+T opens the trade from the chart"
+#define PLS_OPEN_AT_ONCE                 "Open at once"
+#define PLS_HOTKEY_NOTE_AT_ONCE          "One click or one Shift+T opens the trade"
 #define PLS_SOUNDS                       "Sounds"
 #define PLS_MOVE_SL_TO_BREAKEVEN         "Move SL to breakeven"
 #define PLS_BREAKEVEN_AT                 "Breakeven at"
@@ -672,6 +676,7 @@ string PlReasonStatusShort(const PlReason r)
       case PL_R_NETTING_NO_VALUE:   return "Netting: cannot value it";
       case PL_R_NETTING_TP_PARTS:   return "Netting: use fewer TPs";
       case PL_R_NO_CALC:            return "No loss figure yet";
+      case PL_R_NO_MARGIN:          return "No margin from broker";
       case PL_R_CALC_MODE:          return "Instrument not supported";
       case PL_R_LOT_GRID:           return "Lot step does not fit";
       case PL_R_NO_FILL_MODE:       return "No fill type allowed";
@@ -785,7 +790,7 @@ string PlAltOfPhrase(const string t)
   {
    if(t=="") return "";
    if(StringFind(t,"No new quote",0)==0) return PlReasonStatusShort(PL_R_STALE_QUOTE);
-   for(int i=1;i<=(int)PL_R_OTHER_PLAINLINES;i++)
+   for(int i=1;i<=(int)PL_R_LAST;i++)
      {
       const PlReason r=(PlReason)i;
       if(PlReasonText(r)==t) return PlReasonStatusShort(r);

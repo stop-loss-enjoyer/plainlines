@@ -49,7 +49,7 @@ enum PlMenuKey
    MK_RESERVED1, MK_RESERVED2,       // reserved ids: the numbers of the other keys stay as they are
    MK_THEME, MK_SCALE,
    MK_RESERVED3,
-   MK_SOUNDS, MK_QSTYLE, MK_LINEW, MK_CLICKPLACE
+   MK_SOUNDS, MK_QSTYLE, MK_LINEW, MK_CLICKPLACE, MK_INSTANT
   };
 
 enum PlFont { FN_UI=0, FN_SB=1, FN_NUM=2, FN_BRAND=3 };
@@ -2085,6 +2085,7 @@ string PlSecSub(const int idx,color &c)
          return (t!="")?t:PLS_SUB_OFF;
         }
       case PL_SEC_CONFIRM:
+         if(g_cfg.instant) return PLS_SUB_AT_ONCE;
          return (g_cfg.confirm_on?PLS_SUB_ON:PLS_SUB_OFF)+((g_cfg.confirm_on && g_cfg.confirm_above>0.0)?dt+PLS_SUB_ABOVE+PlNumTrim(g_cfg.confirm_above,1)+"%":"");
       case PL_SEC_COMMISSION:
         {
@@ -2168,9 +2169,14 @@ double CPlPanel::BuildMenu(double y)
    ss=PlSecSub(PL_SEC_CONFIRM,sc); y=MSection(y,PL_SEC_CONFIRM,PLS_M_CONFIRM,ss,sc);
    if(m_sec[PL_SEC_CONFIRM])
      {
-      y=MToggle(y,MK_CONFIRM,PLS_CONFIRMATION,g_cfg.confirm_on);
-      y=MNum(y,PLF_CONF_ABOVE,PLS_CONFIRM_ABOVE,"%");
-      y=MNote(y,PLS_HOTKEY_NOTE,g_th.text2);
+      //--- Open at once wins over Confirmation: while it is on the two rows below it would change nothing, so they are not shown
+      y=MToggle(y,MK_INSTANT,PLS_OPEN_AT_ONCE,g_cfg.instant);
+      if(!g_cfg.instant)
+        {
+         y=MToggle(y,MK_CONFIRM,PLS_CONFIRMATION,g_cfg.confirm_on);
+         y=MNum(y,PLF_CONF_ABOVE,PLS_CONFIRM_ABOVE,"%");
+        }
+      y=MNote(y,g_cfg.instant?PLS_HOTKEY_NOTE_AT_ONCE:PLS_HOTKEY_NOTE,g_th.text2);
       y+=6;
      }
    Div(y);

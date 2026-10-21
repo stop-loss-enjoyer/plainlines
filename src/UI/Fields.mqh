@@ -304,6 +304,29 @@ int PlEstDir()
    return 1;
   }
 
+//--- the trader sets the SL (its line, its price tag, the SL field): the TPs stay where they are (PlTpHold). Only when the SL went
+//--- through the entry the side turns and no TP of the old side can stand: then each TP goes to the other side of the entry at the
+//--- same distance (mirrored around the price the side is judged by, PlEstDir), and stays there while the drag goes on. A mirror
+//--- at or below zero falls back to its R on the new side, as on the first lines.
+void PlSlMovedTo(const double sl)
+  {
+   const int before=PlEstDir();
+   PlTpHold();
+   g_px.sl=sl;
+   if(PlEstDir()==before)
+      return;
+   double ref=(g_sym.ask+g_sym.bid)/2.0;
+   if(g_dr.kind==PL_KIND_LIMIT || g_dr.kind==PL_KIND_STOP) ref=g_px.entry;
+   if(g_dr.kind==PL_KIND_STOP_LIMIT) ref=g_px.limit;
+   for(int i=0;i<PL_MAX_TP;i++)
+     {
+      if(g_px.tp[i]<=0.0) continue;
+      const double m=PlTickRound(2.0*ref-g_px.tp[i]);
+      if(m>0.0) g_px.tp[i]=m;
+      else g_dr.tp_price[i]=false;
+     }
+  }
+
 double PlTickRound(const double p)
   {
    if(g_sym.tick_size<=0.0) return p;
@@ -321,6 +344,15 @@ double PlToUnit(const double dist) { double u=PlPipSize(g_sym); return (u>0.0)?d
 string PlFmtUnitField(const double v) { return DoubleToString(v,(MathAbs(v)>=1000.0)?0:1); }
 
 //--- text for each field --------------------------------------------------------------------------
+//--- the R of TP i as its line stands now (a TP is a price once placed: the SL or the price may have moved since);
+//--- the stored R only while the TP has no price yet
+double PlTpRShown(const int i,const double exec)
+  {
+   if(!g_dr.tp_price[i]) return g_dr.tp_r[i];
+   const double d=MathAbs(exec-g_px.sl);
+   return (d>PL_EPS && g_px.tp[i]>0.0)?MathAbs(g_px.tp[i]-exec)/d:0.0;
+  }
+
 string PlFieldText(const int id)
   {
    int dg=g_sym.digits;
@@ -335,20 +367,15 @@ string PlFieldText(const int id)
       case PLF_SL_PIPS:   return PlFmtUnitField(PlToUnit(MathAbs(exec-g_px.sl)));
       case PLF_TP_PRICE:  return DoubleToString(g_px.tp[0],dg);
       case PLF_TP_PIPS:   return PlFmtUnitField(PlToUnit(MathAbs(g_px.tp[0]-exec)));
-      case PLF_TP_R:
-        {
-         double d=MathAbs(exec-g_px.sl);
-         double r=g_dr.tp_price[0]?((d>PL_EPS)?MathAbs(g_px.tp[0]-exec)/d:0.0):g_dr.tp_r[0];
-         return PlTrimNum(r);
-        }
+      case PLF_TP_R:      return PlTrimNum(PlTpRShown(0,exec));
       case PLF_COMM_RATE: return DoubleToString(g_dr.comm.rate,(g_dr.comm.kind==PL_COMM_PERCENT_SIDE)?4:2);
       case PLF_CAP:       return DoubleToString(g_cfg.cap,1);
       case PLF_CONF_ABOVE:return DoubleToString(g_cfg.confirm_above,1);
       case PLF_ATR_MULT:  return PlTrimNum(g_cfg.atr_mult);
       case PLF_ATR_PERIOD:return IntegerToString(g_cfg.atr_period);
-      case PLF_TP2_R:     return PlTrimNum(g_dr.tp_r[1]);
+      case PLF_TP2_R:     return PlTrimNum(PlTpRShown(1,exec));
       case PLF_TP2_SHARE: return DoubleToString(g_cfg.tp_share2,0);
-      case PLF_TP3_R:     return PlTrimNum(g_dr.tp_r[2]);
+      case PLF_TP3_R:     return PlTrimNum(PlTpRShown(2,exec));
       case PLF_TP3_SHARE: return DoubleToString(g_cfg.tp_share3,0);
       case PLF_MAGIC:     return (string)g_cfg.magic;
       case PLF_COMMENT:   return g_cfg.comment;
@@ -397,7 +424,7 @@ bool PlFieldApply(const int id,const string text)
          if(!PlParseNum(text,v) || v<=0.0) return false;
          v2=PlTickRound(v);
          if(!PlPriceSane(v2)) return false;
-         g_px.sl=v2;
+         PlSlMovedTo(v2);
          break;
       case PLF_SL_PIPS:
         {
@@ -406,7 +433,7 @@ bool PlFieldApply(const int id,const string text)
          int dir=PlEstDir();
          v2=PlTickRound(ref-dir*v*PlPipSize(g_sym));
          if(!PlPriceSane(v2)) return false;
-         g_px.sl=v2;
+         PlSlMovedTo(v2);
          break;
         }
       case PLF_TP_PRICE:

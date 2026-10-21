@@ -77,6 +77,7 @@ string PlReasonText(const PlReason r)
       case PL_R_ATR_NOT_READY:      return "ATR is not ready yet";
       case PL_R_SIDE_CROSSED:       return "Price crossed the SL line: move it";
       case PL_R_NETTING_TP_PARTS:   return "Netting account: a TP share is below the minimum lot, use fewer TPs";
+      case PL_R_NO_MARGIN:          return "Broker gives no margin for this symbol, not trading";
       case PL_R_OTHER_PLAINLINES:   return "Remove Plainlines Pro first: one Plainlines per terminal";
      }
    return "";

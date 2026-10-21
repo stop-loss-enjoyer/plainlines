@@ -198,7 +198,7 @@ void PlBuildInputs()
    g_in.risk_mode=g_dr.unit_money?PL_RISK_MONEY:PL_RISK_PERCENT;
    g_in.risk_percent=g_dr.risk_pct; g_in.risk_money=g_dr.risk_money; g_in.lot_fixed=g_cfg.lot_fixed;
    g_in.base=(PlRiskBase)g_cfg.base; g_in.subtract_open=g_cfg.subtract_open;
-   g_in.cap_percent=g_cfg.cap; g_in.confirm_above=g_cfg.confirm_on?g_cfg.confirm_above:g_cfg.cap;     // Confirmation off asks nothing for the risk, the cap still blocks
+   g_in.cap_percent=g_cfg.cap; g_in.confirm_above=(g_cfg.confirm_on && !g_cfg.instant)?g_cfg.confirm_above:g_cfg.cap;     // Confirmation off or Open at once asks nothing for the risk, the cap still blocks
    g_in.over_max=(PlOverMax)g_cfg.over_max;
    g_in.max_spread_share=g_cfg.max_spread/100.0;
    g_in.comm=g_dr.comm;
@@ -214,7 +214,7 @@ void PlBuildInputs()
         }
    }
    g_in.atr_on=g_cfg.atr_on; g_in.atr=g_atr; g_in.atr_mult=g_cfg.atr_mult;
-   g_in.calcprofit_ok=false; g_in.calcprofit_loss_1lot=0.0;
+   g_in.calcprofit_ok=false; g_in.calcprofit_loss_1lot=0.0; g_in.calcprofit_vol=1.0; g_in.fx_rate=0.0;
   }
 
 //--- rights, connection, demo-only and the symbol mode live outside the core: they join the verdict here.
@@ -509,10 +509,11 @@ bool PlRecalc()
    //--- the core's prices go back to the lines
    if(g_plan.ok && g_prices_ok && !g_side_crossed)
      {
-      //--- while a line is dragged only that line is left alone: the others (TP in R mode) follow it
       if(g_dr.kind==PL_KIND_MARKET && g_drag_w!=0) g_px.entry=g_plan.entry;
+      //--- a TP in R is placed once and is the trader's price from then on (a user request of 21.10.2026: "the lines are
+      //--- tied to nothing, the trader sets them"): on Market the entry follows the quote and an R target rode along with it
       for(int i=0;i<PL_MAX_TP;i++)
-         if(!g_dr.tp_price[i] && g_plan.tp[i]>0.0 && g_drag_w!=3+i) g_px.tp[i]=g_plan.tp[i];
+         if(!g_dr.tp_price[i] && g_plan.tp[i]>0.0 && g_drag_w!=3+i) { g_px.tp[i]=g_plan.tp[i]; g_dr.tp_price[i]=true; }
       if(g_cfg.atr_on && g_plan.sl>0.0 && g_drag_w!=2) g_px.sl=g_plan.sl;
       //--- distances for the state file
       if(g_sym.tick_size>0.0)
@@ -605,23 +606,25 @@ void PlHandleMenu(const int key,const int opt)
       case MK_OVERMAX:  g_cfg.over_max=(int)PlClampD((double)opt,0,2); break;
       case MK_ATR:      g_cfg.atr_on=!g_cfg.atr_on; PlAtrUpdate(); break;
       case MK_TPCOUNT:
+        {
+         const int was=g_cfg.tp_count;
          g_cfg.tp_count=opt+1;
          //--- shares set while there were fewer TPs: the first TP keeps at least 1 percent (the input checks the same sum)
          if(g_cfg.tp_count>=3 && g_cfg.tp_share2+g_cfg.tp_share3>99.0) g_cfg.tp_share3=MathMax(1.0,99.0-g_cfg.tp_share2);
-         {
-          //--- new TP lines start at their R from the entry
-          double exec=g_plan.ok?g_plan.exec:PlEstExec();
-          double d=MathAbs(exec-g_px.sl);
-          int dir=PlEstDir();
-          for(int i=1;i<PL_MAX_TP;i++)
-             if(i<g_cfg.tp_count && (g_px.tp[i]<=0.0 || g_dr.tp_price[i]==false))
-                g_px.tp[i]=PlTickRound(exec+dir*g_dr.tp_r[i]*d);
-         }
+         //--- a TP line that comes back starts at its R from the entry, not where it stood before it was turned off
+         double exec=g_plan.ok?g_plan.exec:PlEstExec();
+         double d=MathAbs(exec-g_px.sl);
+         int dir=PlEstDir();
+         for(int i=1;i<PL_MAX_TP;i++)
+            if(i<g_cfg.tp_count && (i>=was || g_px.tp[i]<=0.0))
+              { g_px.tp[i]=PlTickRound(exec+dir*g_dr.tp_r[i]*d); g_dr.tp_price[i]=(d>0.0); }
          break;
+        }
       case MK_NO_SL:    g_cfg.no_sl=!g_cfg.no_sl; break;
       case MK_NO_TP:    g_cfg.no_tp=!g_cfg.no_tp; break;
       case MK_EXPIRY:   g_cfg.expiry_mode=opt; break;
       case MK_CONFIRM:  g_cfg.confirm_on=!g_cfg.confirm_on; break;
+      case MK_INSTANT:  g_cfg.instant=!g_cfg.instant; break;
       case MK_BE:       g_cfg.be_on=!g_cfg.be_on; break;
       case MK_TRAIL:    g_cfg.trail_on=!g_cfg.trail_on; break;
       case MK_CLOSEBTN: g_cfg.close_btns=!g_cfg.close_btns; break;
@@ -804,8 +807,8 @@ void PlReconcileTick()
    else if(r.phrase!=g_msg) { PlMessage(r.phrase,30000,0); g_key=""; if(g_panel.Created()) { g_panel.Redraw(); ChartRedraw(); } }
   }
 
-//--- a click on the action button or Shift+T. ask: Shift+T from an open menu only brings the main view back
-//--- and asks first, as if Confirmation were on; the second Shift+T or a click sends
+//--- a click on the action button or Shift+T. ask: Shift+T, which asks first as if Confirmation were on (the second Shift+T
+//--- or a click sends) unless Open at once is on
 void PlPress(const string source,const bool ask=false)
   {
    const ulong now=GetTickCount64();
@@ -839,8 +842,12 @@ void PlPress(const string source,const bool ask=false)
    if(!PlCanPress()) { PLDBG("PRESS cannot: plan_ok="+(string)g_plan.ok+" verdict="+(string)(int)g_res.verdict+" reason="+(string)(int)g_res.reason); g_panel.Redraw(); ChartRedraw(); return; }
    //--- the last open on this symbol had no answer: this press only arms, and says why (the second press is the acknowledgement)
    const bool unk=(g_unk_sym!="" && g_unk_sym==g_sym.name);
-   //--- the very first trade of this terminal asks once, whatever Confirmation says: the button then shows the lot and the risk (g_cfg.first_sent)
-   if(g_cfg.confirm_on || ask || !g_cfg.first_sent || g_res.verdict==PL_CONFIRM || g_res.split_n>1 || unk)      // a split always asks first
+   //--- the very first trade of this terminal asks once, whatever Confirmation says: the button then shows the lot and the risk (g_cfg.first_sent).
+   //--- Open at once (on by default) drops these three asks: Confirmation, the first trade and the second Shift+T. What the plan itself asks
+   //--- (the core's PL_CONFIRM: the minimum lot above the risk, margin, no SL and the like), a split and a send left without an answer still
+   //--- ask: the trade would be another than the one the trader set
+   const bool ux_ask=!g_cfg.instant && (g_cfg.confirm_on || ask || !g_cfg.first_sent);
+   if(ux_ask || g_res.verdict==PL_CONFIRM || g_res.split_n>1 || unk)      // a split always asks first
      {
       //--- an add to a netting position: the confirmation that is asked anyway says "adds to the open position, SL, TP and risk are for all of it"
       //--- (the status line, PlStatusText), so this press is the acknowledgement and the send does not ask a second time. A confirmation of the
@@ -855,10 +862,11 @@ void PlPress(const string source,const bool ask=false)
    PlDoSend();
   }
 
-//--- Shift+T: the main view first when the menu is open, then it arms the confirmation, also with Confirmation off:
-//--- a capital T typed on the chart (TSLA, ETHUSD) is the same key, so one press must never send. The next Shift+T or a click
-//--- sends, with the same pause and window as any confirmation; any other key cancels it (PlOnKey), so typing a symbol only arms
-//--- and lets go. The button itself stays one click when Confirmation is off.
+//--- Shift+T: the main view first when the menu is open (that press only brings it back: the plan was behind the menu), then
+//--- with Open at once one press sends, like the button (a user request of 21.10.2026). With Open at once off it arms the
+//--- confirmation, also with Confirmation off: a capital T typed on the chart (TSLA, ETHUSD) is the same key. The next Shift+T
+//--- or a click sends, with the same pause and window as any confirmation; any other key cancels it (PlOnKey), so typing a
+//--- symbol only arms and lets go.
 void PlHotkeyAct()
   {
    const bool from_hidden=(g_panel.menu && !g_cfg.quick);
@@ -867,6 +875,7 @@ void PlHotkeyAct()
       g_panel.menu=false;
       PlFldClearBad();
       g_panel.Redraw(); ChartRedraw();
+      if(g_cfg.instant) { PLDBG("PRESS hotkey: main view back, not sent"); return; }
      }
    PlPress("hotkey",true);
   }
@@ -1266,6 +1275,7 @@ void PlDevCommand(const string cmd)
    else if(p[0]=="cancel") PlCancelArm(PLS_CANCELLED);
    else if(p[0]=="firstsent" && n>=2) { g_cfg.first_sent=(p[1]!="off"); PlSettingsSave(); PlModelChanged(); }      // off: the next trade is the first one of the terminal again
    else if(p[0]=="confirm" && n>=2) { g_cfg.confirm_on=(p[1]!="off"); PlSettingsSave(); PlModelChanged(); }
+   else if(p[0]=="instant" && n>=2) { g_cfg.instant=(p[1]!="off"); PlSettingsSave(); PlModelChanged(); }
    else if(p[0]=="fill" && n>=2) g_tr_force_fill=(p[1]=="fok")?ORDER_FILLING_FOK:(p[1]=="ioc")?ORDER_FILLING_IOC:(p[1]=="ret")?ORDER_FILLING_RETURN:-1;
    else if(p[0]=="drop") { if(n>=2) g_tr_dropn=(int)StringToInteger(p[1]); else g_tr_drop=true; }
    else if(p[0]=="reject" && n>=2) { g_tr_rejectn=(int)StringToInteger(p[1]); g_tr_rejectcode=(n>=3)?(uint)StringToInteger(p[2]):TRADE_RETCODE_REJECT; }
@@ -2403,7 +2413,8 @@ void PlPlaceClick(const int mx,const int my)
    if(ObjectFind(0,nm)<0) return;
    g_pl_clicked=now;
    ObjectSetDouble(0,nm,OBJPROP_PRICE,p);        // the line is where the click is, not where the last throttled step left it
-   PlPxSet(w,p);
+   if(w==2) PlSlMovedTo(p);                      // as a dragged SL: the TPs stay, or mirror when the click turned the side
+   else PlPxSet(w,p);
    g_pl_i++;
    const bool last=(g_pl_i>=g_pl_n);
    PLDBG("PLACE fixed "+PlLineName(w)+" at "+DoubleToString(p,g_sym.digits)+(last?" (last)":""));

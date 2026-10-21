@@ -35,6 +35,7 @@ struct PlSettings
    int               expiry_hours;
    double            max_spread;      // percent of the SL distance
    bool              confirm_on;
+   bool              instant;         // one press of the button or Shift+T opens the trade (on by default); off: Confirmation, the first trade and Shift+T ask as before
    bool              first_sent;      // a trade of this terminal has gone out: until then the first press asks once (a file that has no such key is an old one: true)
    bool              be_on;
    double            be_r;
@@ -64,7 +65,7 @@ struct PlDraft
    double            risk_pct;
    double            risk_money;
    double            tp_r[PL_MAX_TP];
-   bool              tp_price[PL_MAX_TP]; // TP given as a price (R follows the price)
+   bool              tp_price[PL_MAX_TP]; // TP stands at its price (false only until the next count places it from its R)
    double            sl_ticks;        // signed distance SL minus entry, in ticks (negative = below)
    double            tp_ticks;        // signed distance TP1 minus entry, in ticks, for price mode
    double            trail_dist;      // trailing distance in the SL field unit of this symbol (pips forex 3/5 digits, else points), 0 = the initial SL distance
@@ -83,6 +84,16 @@ struct PlPx
 PlSettings g_cfg;
 PlDraft    g_dr;
 PlPx       g_px;
+
+//--- the trader moved the SL (its line, its price tag, the SL field): every TP stays at the price it has now, in every order kind
+//--- (a user request of 20.10.2026: "the TP line must stay where it is when I move the SL"). A TP in R becomes that price; R only places a TP
+//--- (the R field, the first lines), it ties it neither to the SL nor to the quote (PlRecalc makes it a price at once).
+void PlTpHold()
+  {
+   for(int i=0;i<PL_MAX_TP;i++)
+      if(!g_dr.tp_price[i] && g_px.tp[i]>0.0) g_dr.tp_price[i]=true;
+  }
+
 PlSymbol   g_sym;
 PlAccount  g_acc;
 PlInputs   g_in;
@@ -232,6 +243,7 @@ void PlSettingsDefaults()
    g_cfg.magic=20261011; g_cfg.comment="Plainlines"; g_cfg.expiry_mode=0; g_cfg.expiry_hours=24; g_cfg.max_spread=30.0;
    g_cfg.first_sent=false;
    g_cfg.confirm_on=false;                  // one click on the action button sends; the second-press asks below stay
+   g_cfg.instant=true;                      // the button and Shift+T open at once (a user request of 21.10.2026)
    g_cfg.be_on=false; g_cfg.be_r=1.0; g_cfg.trail_on=false; g_cfg.part_pct=50.0;
    g_cfg.close_btns=true; g_cfg.sounds=true; g_cfg.lines=true;
    g_cfg.max_open=0; g_cfg.max_day=0; g_cfg.margin_use=50.0;
@@ -293,6 +305,7 @@ void PlSettingsBuild()
    PlKvSetI("expiry_mode",g_cfg.expiry_mode); PlKvSetI("expiry_hours",g_cfg.expiry_hours); PlKvSetD("max_spread",g_cfg.max_spread);
    PlKvSetB("confirm_on",g_cfg.confirm_on); PlKvSetB("confirm_v2",true);
    PlKvSetB("first_sent",g_cfg.first_sent);
+   PlKvSetB("instant",g_cfg.instant);
    PlKvSetB("be_on",g_cfg.be_on); PlKvSetD("be_r",g_cfg.be_r); PlKvSetB("trail_on",g_cfg.trail_on);
    PlKvSetD("part_pct",g_cfg.part_pct);
    PlKvSetB("close_btns",g_cfg.close_btns);
@@ -442,6 +455,7 @@ void PlSettingsLoad()
    g_cfg.max_spread=PlKvD("max_spread",g_cfg.max_spread);
    g_cfg.confirm_on=PlKvB("confirm_on",g_cfg.confirm_on);
    g_cfg.first_sent=PlKvB("first_sent",true);          // a settings file of an earlier build has no such key: that terminal has traded
+   g_cfg.instant=PlKvB("instant",true);                 // a settings file of an earlier build has no such key: on, the new default for everyone
    g_cfg.be_on=PlKvB("be_on",g_cfg.be_on); g_cfg.be_r=PlKvD("be_r",g_cfg.be_r);
    //--- the earlier version kept trail_mode (0 off, 1 ATR, 2 pips): ATR becomes pips with the distance of the initial SL
    g_cfg.trail_on=PlKvB("trail_on",PlKvI("trail_mode",0)>0);
@@ -559,7 +573,7 @@ bool PlCommMoneyOf(const PlCommKind kind,const double rate,const string sym,cons
         {
          double p1=0.0;
          if(ex<=0.0 || sl<=0.0 || !OrderCalcProfit(ot,sym,vol,ex,ex*1.01,p1) || p1==0.0) return false;
-         money=MathAbs(p1)*rate*(1.0+sl/ex);      // notional in money = |p1| * 100, per side rate percent, the exit at the SL price
+         money=MathMax(MathAbs(p1)*rate*(1.0+sl/ex),min_round);      // notional in money = |p1| * 100, per side rate percent, the exit at the SL price
          return true;
         }
      }

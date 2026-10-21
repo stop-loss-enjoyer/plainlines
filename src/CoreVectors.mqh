@@ -214,6 +214,7 @@ void PlVecInputs(PlInputs &in)
    in.atr_mult=0.0;
    in.calcprofit_ok=false;
    in.calcprofit_loss_1lot=0.0;
+   in.calcprofit_vol=1.0;
    in.net_calc_ok=false;
    in.net_loss_new=0.0;
    in.net_loss_old=0.0;
@@ -4120,7 +4121,8 @@ void PlVec68(PlVector &v)
 //+------------------------------------------------------------------+
 //| 69 margin_missing_blocks
 //| The terminal gave no margin for 1 lot (OrderCalcMargin failed): the margin and stop-out checks cannot run, BLOCK
-//|   Buy Market, SL 1.11794, 1%: lot 0.43, risk 98.9. margin_buy_1lot = 0: BLOCK PL_R_NO_SYMBOL_DATA (never a silent OK).
+//|   Buy Market, SL 1.11794, 1%: lot 0.43, risk 98.9. margin_buy_1lot = -1 (no answer): BLOCK PL_R_NO_SYMBOL_DATA (never a silent OK).
+//|   An answer of 0 is vector 176.
 //+------------------------------------------------------------------+
 void PlVec69(PlVector &v)
   {
@@ -4133,8 +4135,9 @@ void PlVec69(PlVector &v)
    PlVecSymEURUSD(v.s);
    PlVecAccount(v.a,"USD",2,10000.0,10000.0,0.0,10000.0);
    PlVecInputs(v.in);
-   v.s.margin_buy_1lot=0.0; v.s.margin_sell_1lot=0.0;
+   v.s.margin_buy_1lot=-1.0; v.s.margin_sell_1lot=-1.0;
    v.in.sl=1.11794;
+   v.in.calcprofit_ok=true; v.in.calcprofit_loss_1lot=230.0;     // the loss is known: only the margin is missing (20.10.2026)
    //--- expected
    v.chk_prepare_ok=true; v.exp_prepare_ok=true;
    v.exp_side=PL_SIDE_BUY;
@@ -7121,7 +7124,168 @@ void PlVec167(PlVector &v)
    v.exp_reason=PL_R_PATHS_DISAGREE;
   }
 
-int PlVectorCount() { return(161); }
+//+------------------------------------------------------------------+
+//| 168 xagusd_tick_value_1_fundednext
+//| XAGUSD as a FundedNext server was reported (Forex Factory, 08.2025): contract 5000, tick 0.001, published tick value 1.0 (the
+//| lot moves 5.00 per tick). OrderCalcProfit 1000 for 200 ticks of 1 lot: the tick value is off by a factor 5, neither 10 nor the
+//| contract, and the move x contract agrees with the terminal: scaled as in 166, the same numbers.
+//+------------------------------------------------------------------+
+void PlVec168(PlVector &v)
+  {
+   PlVec166(v);
+   v.name="xagusd_tick_value_1_fundednext";
+   v.what="XAGUSD tick value 1.0 at contract 5000 and tick 0.001 (FundedNext report): scaled by 5 to OrderCalcProfit, lot 0.10";
+   v.s.tick_value_loss=1.0; v.s.tick_value_profit=1.0;
+  }
+
+//+------------------------------------------------------------------+
+//| 169 ger40_tick_value_not_converted
+//| GER40 (profit EUR) on a USD account with the tick value left in EUR (0.50 instead of 0.55), as five prop servers publish their
+//| EUR, GBP, JPY, AUD and HKD indices (19.10.2026). (a) 100 * 0.5 = 50, OrderCalcProfit 55, the move x contract 50 at the EURUSD
+//| quote 1.10 = 55 agrees with the terminal: the tick values are scaled by 1.1, the vector 07 numbers come out (lot 1.8).
+//+------------------------------------------------------------------+
+void PlVec169(PlVector &v)
+  {
+   PlVec07(v);
+   v.name="ger40_tick_value_not_converted";
+   v.what="GER40 EUR on USD with the tick value left in EUR (0.50), EURUSD quote 1.10: scaled to OrderCalcProfit 55, lot 1.8";
+   v.s.tick_value_loss=0.5;
+   v.s.tick_value_profit=0.5;
+   v.in.fx_rate=1.10;
+  }
+
+//+------------------------------------------------------------------+
+//| 170 ger40_tick_value_not_converted_no_quote
+//| The same GER40 with no EUR/USD forex symbol in the terminal (fx_rate 0): nothing explains the gap between 50 and 55:
+//| BLOCK PL_R_PATHS_DISAGREE, numbers by the worst path (55).
+//+------------------------------------------------------------------+
+void PlVec170(PlVector &v)
+  {
+   PlVec07(v);
+   v.name="ger40_tick_value_not_converted_no_quote";
+   v.what="GER40 EUR on USD with the tick value left in EUR (0.50) and no EURUSD quote: unexplained, BLOCK PL_R_PATHS_DISAGREE";
+   v.s.tick_value_loss=0.5;
+   v.s.tick_value_profit=0.5;
+   v.exp_lpl_a=50.0;
+   v.exp_lpl_price=55.0;
+   v.exp_loss_per_lot=55.0;
+   v.exp_spread_money=EMPTY_VALUE;
+   v.exp_lot=EMPTY_VALUE; v.exp_risk_money=EMPTY_VALUE; v.exp_risk_percent=EMPTY_VALUE; v.exp_margin_needed=EMPTY_VALUE;
+   v.exp_verdict=PL_BLOCK;
+   v.exp_reason=PL_R_PATHS_DISAGREE;
+  }
+
+//+------------------------------------------------------------------+
+//| 171 ger40_tick_value_x10_not_converted
+//| Hola Prime E35EUR shape (19.10.2026): the tick value both left in EUR and 10 times too large (5.0 at tick 0.5, contract 1).
+//| (a) 100 * 5 = 500, OrderCalcProfit 55, the move x contract 50 at the EURUSD quote 1.10 = 55: two independent paths agree,
+//| the tick values are scaled by 0.11, the vector 07 numbers come out (lot 1.8).
+//| A quote that does not fit (1.30: 65 against 55) leaves it unexplained: vector 172 blocks.
+//+------------------------------------------------------------------+
+void PlVec171(PlVector &v)
+  {
+   PlVec07(v);
+   v.name="ger40_tick_value_x10_not_converted";
+   v.what="GER40 tick value 5.0 left in EUR and 10x, EURUSD quote 1.10: scaled to OrderCalcProfit 55, lot 1.8";
+   v.s.tick_value_loss=5.0;
+   v.s.tick_value_profit=5.0;
+   v.in.fx_rate=1.10;
+  }
+
+void PlVec172(PlVector &v)
+  {
+   PlVec170(v);
+   v.name="ger40_tick_value_quote_does_not_fit";
+   v.what="GER40 tick value 0.50 left in EUR, a quote 1.30 that gives 65 against OrderCalcProfit 55: BLOCK PL_R_PATHS_DISAGREE";
+   v.in.fx_rate=1.30;
+  }
+
+//+------------------------------------------------------------------+
+//| 173 coin_under_a_dollar_scaled_calc
+//| XRP/USD as BrightFunded shows it (19.10.2026): contract 1, tick 0.00001, tick value 0.00001, Ask 1.30010. The loss of ONE lot to an
+//| SL 1250 ticks away is 0.0125 USD, which OrderCalcProfit rounds to 0.01 (and margin 0.26 to 0.26). The terminal layer takes it on
+//| 1000 lots (12.50) and divides back (PlCalcProfitPerLot): c = 0.0125, calcprofit_vol 1000.
+//|   (a) 1250 * 0.00001 = 0.0125, (c) 0.0125, agree. Target 1% of 10000 = 100, lot_raw 100 / 0.0125 = 8000, lot 8000.00, risk 100.
+//|   margin 8000 * 0.26 = 2080, spread 10 points, money 10 * 0.00001 * 8000 = 0.8.
+//+------------------------------------------------------------------+
+void PlVec173(PlVector &v)
+  {
+   PlVec06(v);
+   v.name="coin_under_a_dollar_scaled_calc";
+   v.what="XRP/USD contract 1 (BrightFunded): 1 lot loses 0.0125 to the SL, taken on 1000 lots and divided back: lot 8000, risk 100";
+   v.s.name="XRP/USD";
+   v.s.digits=5; v.s.point=0.00001; v.s.tick_size=0.00001; v.s.contract=1.0;
+   v.s.tick_value_loss=0.00001; v.s.tick_value_profit=0.00001;
+   v.s.vol_min=0.01; v.s.vol_step=0.01; v.s.vol_max=125000.0;
+   v.s.bid=1.30000; v.s.ask=1.30010;
+   v.s.margin_buy_1lot=0.26; v.s.margin_sell_1lot=0.26;
+   v.s.swap_long=0.0; v.s.swap_short=0.0;
+   v.in.sl=1.28760;
+   v.in.calcprofit_loss_1lot=0.0125;
+   v.in.calcprofit_vol=1000.0;
+   v.exp_exec=1.30010;
+   v.exp_sl=1.28760;
+   v.exp_ticks=1250;
+   v.exp_lpl_a=0.0125;
+   v.exp_lpl_price=0.0125;
+   v.exp_loss_per_lot=0.0125;
+   v.exp_lot=8000.0;
+   v.exp_risk_money=100.0;
+   v.exp_risk_percent=1.0;
+   v.exp_margin_needed=2080.0;
+   v.exp_spread_points=10.0;
+   v.exp_spread_money=0.8;
+  }
+
+//+------------------------------------------------------------------+
+//| 174 coin_under_a_dollar_scaled_calc_disagrees
+//| The same XRP/USD with the terminal's loss 0.0150 per lot taken on 1000 lots, 20% above the tick value path (0.0125). At 1 lot the
+//| half cent of rounding would have hidden that gap (|0.0125 - 0.015| = 0.0025 < 0.005); taken on 1000 lots the slack is 0.000005, so
+//| the gap shows: nothing explains it (move x contract 0.0125, no forex rate), BLOCK PL_R_PATHS_DISAGREE, numbers by the worst (0.015).
+//+------------------------------------------------------------------+
+void PlVec174(PlVector &v)
+  {
+   PlVec173(v);
+   v.name="coin_under_a_dollar_scaled_calc_disagrees";
+   v.what="XRP/USD loss 0.0150 per lot on 1000 lots against tick value 0.0125: the half cent no longer hides 20%, BLOCK PL_R_PATHS_DISAGREE";
+   v.in.calcprofit_loss_1lot=0.015;
+   v.exp_lpl_price=0.015;
+   v.exp_loss_per_lot=0.015;
+   v.exp_spread_money=EMPTY_VALUE;
+   v.exp_lot=EMPTY_VALUE; v.exp_risk_money=EMPTY_VALUE; v.exp_risk_percent=EMPTY_VALUE; v.exp_margin_needed=EMPTY_VALUE;
+   v.exp_verdict=PL_BLOCK;
+   v.exp_reason=PL_R_PATHS_DISAGREE;
+  }
+
+//+------------------------------------------------------------------+
+//| 175 coin_under_a_dollar_1lot_rounded
+//| A terminal that refuses the larger volume leaves the 1-lot answer, rounded: c 0.01 on 1 lot for a true 0.0125. The half cent of
+//| slack lets the paths agree and the loss per lot is the larger path (0.0125): the lot is never larger than the true loss allows.
+//+------------------------------------------------------------------+
+void PlVec175(PlVector &v)
+  {
+   PlVec173(v);
+   v.name="coin_under_a_dollar_1lot_rounded";
+   v.what="XRP/USD 1-lot answer rounded to 0.01 (no larger volume): the paths agree within the half cent, the loss per lot is the larger 0.0125, lot 8000";
+   v.in.calcprofit_loss_1lot=0.01;
+   v.in.calcprofit_vol=1.0;
+  }
+
+//+------------------------------------------------------------------+
+//| 176 margin_zero_answer_blocks
+//| The terminal answered a margin of 0 for 1 lot (FunderPro XPTUSD): the broker gives no margin, BLOCK with its own phrase
+//|   As vector 69 with margin_buy_1lot = 0: BLOCK PL_R_NO_MARGIN.
+//+------------------------------------------------------------------+
+void PlVec176(PlVector &v)
+  {
+   PlVec69(v);
+   v.name="margin_zero_answer_blocks";
+   v.what="The terminal answered a margin of 0 for 1 lot (FunderPro XPTUSD): the broker gives no margin, BLOCK with its own phrase";
+   v.s.margin_buy_1lot=0.0; v.s.margin_sell_1lot=0.0;
+   v.exp_reason=PL_R_NO_MARGIN;
+  }
+
+int PlVectorCount() { return(170); }
 
 bool PlVectorGet(const int i, PlVector &v)
   {
@@ -7288,6 +7452,15 @@ bool PlVectorGet(const int i, PlVector &v)
       case 158: PlVec165(v); return(true);
       case 159: PlVec166(v); return(true);
       case 160: PlVec167(v); return(true);
+      case 161: PlVec168(v); return(true);
+      case 162: PlVec169(v); return(true);
+      case 163: PlVec170(v); return(true);
+      case 164: PlVec171(v); return(true);
+      case 165: PlVec172(v); return(true);
+      case 166: PlVec173(v); return(true);
+      case 167: PlVec174(v); return(true);
+      case 168: PlVec175(v); return(true);
+      case 169: PlVec176(v); return(true);
      }
    return(false);
   }

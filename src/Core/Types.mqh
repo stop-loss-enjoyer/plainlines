@@ -122,8 +122,12 @@ enum PlReason
    //--- appended 16.10.2026: the numbering above is kept; BLOCK
    PL_R_SIDE_CROSSED,        // the price went through the SL line of a Market draft: the side is no longer the one the trader set
    //--- appended 16.10.2026; BLOCK
-   PL_R_OTHER_PLAINLINES     // the other Plainlines (free or Pro) is on a chart of this terminal: one Plainlines per terminal
+   PL_R_OTHER_PLAINLINES,    // the other Plainlines (free or Pro) is on a chart of this terminal: one Plainlines per terminal
+   //--- appended 20.10.2026; BLOCK
+   PL_R_NO_MARGIN            // the terminal gives margin 0 for the lot (FunderPro XPTUSD, margin currency XPT): nothing to check the margin by
   };
+//--- the last reason: loops over every reason end here (PlAltOfPhrase). A reason appended above moves it
+#define PL_R_LAST PL_R_NO_MARGIN
 
 //--- symbol data, filled by Terminal/Market.mqh from SymbolInfo*, SymbolInfoTick, OrderCalc*
 struct PlSymbol
@@ -163,7 +167,8 @@ struct PlSymbol
    double            swap_long;
    double            swap_short;
    int               swap_3day;      // ENUM_DAY_OF_WEEK
-   //--- margin for 1 lot from OrderCalcMargin: at the plan's execution price after PlFillTerminalCalcs, at Ask/Bid before (0 when unavailable)
+   //--- margin for 1 lot from OrderCalcMargin: at the plan's execution price after PlFillTerminalCalcs, at Ask/Bid before;
+   //--- 0 when the terminal answered 0 (the broker gives no margin), -1 when it gave no answer (failed, no quote yet)
    double            margin_buy_1lot;
    double            margin_sell_1lot;
    //--- netting: the one position of this symbol and the pending orders on it (Terminal/Market.mqh PlReadNetting; 0 on hedging)
@@ -248,6 +253,8 @@ struct PlInputs
    //--- precomputed by the terminal for the normalized plan (two-step call)
    bool              calcprofit_ok;
    double            calcprofit_loss_1lot; // OrderCalcProfit for 1 lot from exec price to SL, positive money
+   double            calcprofit_vol;  // the volume it was taken on and divided by (1, or a power of ten when 1 lot rounds to cents)
+   double            fx_rate;         // account money per unit of the profit currency from a forex quote of the account (mid), 0 = none
    bool              net_calc_ok;     // the two values below were given by the terminal
    double            net_loss_new;    // -OrderCalcProfit(side, net_vol, net_open -> plan SL); signed, + is a loss
    double            net_loss_old;    // -OrderCalcProfit(side, net_vol, net_open -> net_sl); 0 when net_sl==0

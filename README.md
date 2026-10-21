@@ -12,7 +12,7 @@ https://github.com/user-attachments/assets/33eb0862-52e2-4045-adbe-e0c19ad5a353
 
 Free for your own trading, prop firm accounts included. Plainlines gives no signals and is not investment advice: you decide every trade.
 
-**Version 0.9.4** (shown as 0.94 in the terminal). Tested on demo accounts and used in live trading on a real broker account (Bybit) and a real prop firm account (FTMO), on Linux under Wine. First users installed it on Windows 11 and on a MacBook (macOS) without problems. What was and was not tried is in [COMPATIBILITY.md](COMPATIBILITY.md).
+**Version 0.9.5** (shown as 0.95 in the terminal). Tested on demo accounts and used in live trading on a real broker account (Bybit) and a real prop firm account (FTMO), on Linux under Wine. First users installed it on Windows 11 and on a MacBook (macOS) without problems. What was and was not tried is in [COMPATIBILITY.md](COMPATIBILITY.md).
 
 ## Install
 
@@ -37,9 +37,9 @@ The Algo Trading button is one switch for the whole terminal: it lets every expe
 1. The panel appears as one slim row, with the Entry, SL and TP lines near the price. A green dot means it is ready.
 2. Drag the SL line to where your stop belongs. Below the entry is a buy, above is a sell.
 3. Pick the risk: 0.5, 1 or 2 percent, or type any percent or sum of money in the field.
-4. The button shows the side and the lot. Click it. The very first trade after install asks for a second press (CONFIRM), so you see what goes out. After that one click sends the order.
+4. The button shows the side and the lot. Click it: the order goes out at once.
 
-Shift+T on the chart opens a trade too, in two presses: the first shows CONFIRM, the second sends. To be asked every time, also for the button, turn on Confirmation in the menu, section Confirm.
+Shift+T on the chart opens a trade too, in one press. If you would rather confirm, turn off Open at once in the menu, section Confirm: then Shift+T takes two presses (the first shows CONFIRM), the very first trade asks once, and you can turn on Confirmation to be asked every time, also for the button.
 
 To enter at another price, drag the Entry line there: the panel picks Limit or Stop by itself while you drag.
 
@@ -60,7 +60,7 @@ The small arrow at the right end of the row opens the full panel: the lines and 
 - **Your own limits**: max total risk, max open positions and orders, max entries a day (the day starts at midnight of the server clock).
 - **Several accounts in one terminal**: switch between accounts you have used, nothing to set again. The risk, the hard cap and Max total risk are remembered for each account.
 - **Click to place** (Advanced, off by default): press Market or Limit, then click the chart to fix the SL and the TP (the Entry first for Limit) instead of dragging the lines. The last click only places a line, nothing is sent.
-- **The small things**: light and dark theme, Shift+T to open a trade (two presses, so typing a symbol never trades), a soft key click on open and close.
+- **The small things**: light and dark theme, Shift+T to open a trade, a soft key click on open and close.
 
 ![Costs before you press: the spread, the commission and the swap of one night in money](assets/promo/card-costs.png)
 
